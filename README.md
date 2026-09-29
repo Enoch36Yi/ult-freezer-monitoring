@@ -74,6 +74,10 @@ differ.
 supabase/schema.sql                             full schema — for a NEW project
 supabase/migrations/001_readings_bucketed.sql   server-side time bucketing
 supabase/migrations/002_bucketed_by_tier.sql    tier isolation  ← REQUIRED
+supabase/migrations/003_authenticated_ingest.sql authenticated device writes
+supabase/migrations/004_replay_safe_observations.sql deduplication
+supabase/migrations/005_clock_provenance.sql    timestamp provenance
+supabase/migrations/006_bound_history_rpc.sql   bounded history RPC
 ```
 
 > **002 is not optional.** Three instruments (ESP32/DS18B20, TRAXX, iMonnit)
@@ -90,9 +94,10 @@ You can then skip the migration — schema.sql already contains it.
 [supabase/migrations/](supabase/migrations/) in numerical order instead. **Do not re-run schema.sql** — it opens with `create table readings`,
 which errors on an existing table and would leave the function uncreated.
 
-The migration is additive and idempotent: `create or replace function` plus a
-`grant`, no table changes and no row changes, safe to run against a table that
-already holds readings and safe to run more than once.
+The migrations are ordered and safe for the populated project: they alter only
+permissions, columns, indexes, and function definitions; they do not rewrite
+or delete existing measurement rows. Apply each numbered file once through the
+project's migration workflow.
 
 Here is the table portion, verbatim from schema.sql:
 

@@ -33,7 +33,7 @@ create policy "anon can read prototype 22 readings"
   on public.prototype_readings for select to anon
   using (true);
 
-create function public.prototype_readings_bucketed(
+create or replace function public.prototype_readings_bucketed(
   p_prototype_id smallint,
   p_start timestamptz,
   p_end timestamptz,
@@ -47,24 +47,37 @@ returns table (
   max_temp_c numeric,
   reading_count bigint
 )
-language sql
+language plpgsql
 stable
 security invoker
 set search_path = ''
 as $$
-  select
-    to_timestamp(floor(extract(epoch from recorded_at) / p_bucket_seconds) * p_bucket_seconds) as bucket_time,
-    avg(temp_c) as avg_temp_c,
-    min(temp_c) as min_temp_c,
-    max(temp_c) as max_temp_c,
-    count(*) as reading_count
-  from public.prototype_readings
-  where prototype_id = p_prototype_id
-    and sensor_tier = p_sensor_tier
-    and recorded_at >= p_start
-    and recorded_at < p_end
-  group by 1
-  order by 1;
+begin
+  if p_bucket_seconds not in (300, 900, 3600, 21600) then
+    raise exception using message = 'unsupported bucket width', errcode = '22023';
+  end if;
+  if p_start is null or p_end is null or p_end <= p_start then
+    raise exception using message = 'invalid history range', errcode = '22023';
+  end if;
+  if p_end > p_start + interval '10 years' then
+    raise exception using message = 'history range is too large', errcode = '22023';
+  end if;
+
+  return query
+    select
+      to_timestamp(floor(extract(epoch from recorded_at) / p_bucket_seconds) * p_bucket_seconds) as bucket_time,
+      avg(temp_c) as avg_temp_c,
+      min(temp_c) as min_temp_c,
+      max(temp_c) as max_temp_c,
+      count(*) as reading_count
+    from public.prototype_readings
+    where prototype_id = p_prototype_id
+      and sensor_tier = p_sensor_tier
+      and recorded_at >= p_start
+      and recorded_at < p_end
+    group by 1
+    order by 1;
+end;
 $$;
 
 revoke all on function public.prototype_readings_bucketed(
