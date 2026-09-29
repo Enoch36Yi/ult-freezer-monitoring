@@ -287,13 +287,16 @@ npm install
 npm run dev       # http://localhost:3000
 ```
 
-`web/.env.local` is already filled in and is gitignored;
-`web/.env.example` documents the same two names for anyone cloning the repo.
+`web/.env.local` is gitignored; copy `web/.env.example` and fill the values
+locally. The example also documents the server-only ingestion variables.
 
 | Variable | Value |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://dfxxamgnrimwoumknuxa.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_…` (publishable/anon — safe client-side) |
+| `SUPABASE_URL` | Same project URL, server-only ingestion setting |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase service credential; never browser-side |
+| `INGEST_DEVICE_SECRETS_JSON` | Server-only device-ID → HMAC-secret map |
 
 These two are the only external configuration. There is no login wall in v1:
 the dashboard is open to anyone with the link.
