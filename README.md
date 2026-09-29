@@ -188,8 +188,8 @@ Verify it took:
 
 ```bash
 curl -s "https://dfxxamgnrimwoumknuxa.supabase.co/rest/v1/readings?select=id&limit=1" \
-  -H "apikey: sb_publishable_Cohksu9zFTER4nO2Eec6fg_DEMjvn0Q" \
-  -H "Authorization: Bearer sb_publishable_Cohksu9zFTER4nO2Eec6fg_DEMjvn0Q"
+  -H "apikey: YOUR_PUBLISHABLE_ANON_KEY" \
+  -H "Authorization: Bearer YOUR_PUBLISHABLE_ANON_KEY"
 ```
 
 `[]` means the table is live. `PGRST205 / could not find the table` means the

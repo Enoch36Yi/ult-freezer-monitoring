@@ -45,9 +45,11 @@ if (-not $stage) {
 }
 
 # Cloud side (read-only)
-$config = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'firmware\include\config.h')
-$baseUrl = [regex]::Match($config, '#define\s+SUPABASE_URL\s+"([^"]+)"').Groups[1].Value.TrimEnd('/')
-$key = [regex]::Match($config, '#define\s+SUPABASE_ANON_KEY\s+"([^"]+)"').Groups[1].Value
+$envFile = Join-Path $projectRoot 'web\.env.local'
+$envText = if (Test-Path -LiteralPath $envFile) { Get-Content -Raw -LiteralPath $envFile } else { '' }
+$baseUrl = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_URL\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim().TrimEnd('/')
+$key = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_ANON_KEY\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim()
+if (-not $baseUrl -or -not $key) { Say 'FAIL' 'web/.env.local is missing Supabase dashboard settings' }
 try {
     $response = Invoke-WebRequest -Uri "$baseUrl/rest/v1/prototype_readings?select=id&limit=1" -UseBasicParsing -TimeoutSec 20 `
         -Headers @{ apikey = $key; Authorization = "Bearer $key"; Prefer = 'count=exact' }

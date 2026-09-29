@@ -35,18 +35,14 @@
 #define FREEZER_ID_MAX 21
 
 // ---------------------------------------------------------------------------
-// Supabase
+// Telemetry API
 // ---------------------------------------------------------------------------
-// Publishable (anon) key. Safe to ship in firmware: RLS is what protects the
-// data, and the anon role can only INSERT and SELECT on the fleet and prototype
-// readings tables (with separate RLS policies).
+// Firmware sends through the authenticated server-side ingestion endpoint.
+// Keep the Supabase service credentials out of firmware entirely.
 #define SUPABASE_URL "https://dfxxamgnrimwoumknuxa.supabase.co"
-#define SUPABASE_ANON_KEY "sb_publishable_Cohksu9zFTER4nO2Eec6fg_DEMjvn0Q"
+#define INGEST_URL "https://ult-freezres.vercel.app/api/ingest"
 #ifdef PROTOTYPE_22
 #define PROTOTYPE_ID 22
-#define SUPABASE_READINGS_PATH "/rest/v1/prototype_readings"
-#else
-#define SUPABASE_READINGS_PATH "/rest/v1/readings"
 #endif
 
 #define HTTP_TIMEOUT_MS 10000

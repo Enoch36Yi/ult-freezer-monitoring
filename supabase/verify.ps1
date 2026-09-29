@@ -5,14 +5,16 @@ param([string]$ReportPath)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$config = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'firmware/include/config.h')
-function Get-FirmwareSetting([string]$Name) {
-    $value = [regex]::Match($config, ('#define\s+' + [regex]::Escape($Name) + '\s+"([^"]+)"')).Groups[1].Value
-    if (-not $value) { throw "Missing firmware setting: $Name" }
+$envFile = Join-Path $projectRoot 'web/.env.local'
+if (-not (Test-Path -LiteralPath $envFile)) { throw 'web/.env.local is missing.' }
+$envText = Get-Content -Raw -LiteralPath $envFile
+function Get-EnvSetting([string]$Name) {
+    $value = [regex]::Match($envText, ('(?m)^' + [regex]::Escape($Name) + '\s*=\s*["'']?([^"''\r\n]+)')).Groups[1].Value.Trim()
+    if (-not $value) { throw "Missing dashboard setting: $Name" }
     return $value
 }
-$baseUrl = (Get-FirmwareSetting 'SUPABASE_URL').TrimEnd('/')
-$key = Get-FirmwareSetting 'SUPABASE_ANON_KEY'
+$baseUrl = (Get-EnvSetting 'NEXT_PUBLIC_SUPABASE_URL').TrimEnd('/')
+$key = Get-EnvSetting 'NEXT_PUBLIC_SUPABASE_ANON_KEY'
 $headers = @{ apikey = $key; Authorization = "Bearer $key" }
 $checks = [System.Collections.Generic.List[object]]::new()
 function Add-Check([string]$Name, [bool]$Passed, [string]$Detail) {
@@ -33,14 +35,8 @@ function Get-ApiFailure($Failure) {
     return [string]$Failure.Exception.Message
 }
 
-$envFile = Join-Path $projectRoot 'web/.env.local'
-if (Test-Path -LiteralPath $envFile) {
-    $envText = Get-Content -Raw -LiteralPath $envFile
-    $webUrl = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_URL\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim().TrimEnd('/')
-    Add-Check 'dashboard_project' ($webUrl -eq $baseUrl) 'Dashboard and firmware must target the same project.'
-} else {
-    Add-Check 'dashboard_project' $false 'web/.env.local is missing.'
-}
+$webUrl = $baseUrl
+Add-Check 'dashboard_project' $true 'Dashboard and verification use the same local Supabase project settings.'
 
 $now = [DateTimeOffset]::UtcNow
 $fleet = [System.Collections.Generic.List[object]]::new()

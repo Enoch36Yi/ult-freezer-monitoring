@@ -33,10 +33,12 @@ function Read-Serial([string]$Text) {
     return $result
 }
 
-$config = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'firmware/include/config.h')
-$baseUrl = [regex]::Match($config, '#define\s+SUPABASE_URL\s+"([^"]+)"').Groups[1].Value.TrimEnd('/')
-$key = [regex]::Match($config, '#define\s+SUPABASE_ANON_KEY\s+"([^"]+)"').Groups[1].Value
-if (-not $key -or ([uri]$baseUrl).Host -ne $expectedHost) { throw 'Firmware config is missing or points to the wrong Supabase project.' }
+$envFile = Join-Path $projectRoot 'web/.env.local'
+if (-not (Test-Path -LiteralPath $envFile)) { throw 'web/.env.local is missing.' }
+$envText = Get-Content -Raw -LiteralPath $envFile
+$baseUrl = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_URL\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim().TrimEnd('/')
+$key = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_ANON_KEY\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim()
+if (-not $baseUrl -or -not $key -or ([uri]$baseUrl).Host -ne $expectedHost) { throw 'Dashboard config is missing or points to the wrong Supabase project.' }
 $headers = @{ apikey = $key; Authorization = "Bearer $key" }
 
 $serial = $null
