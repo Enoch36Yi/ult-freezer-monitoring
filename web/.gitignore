@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+.vercel/
+next-env.d.ts
+*.tsbuildinfo
+
+# Local env — the publishable key lives here; never commit it
+.env.local
+.env*.local
+
+.vercel
+.env*
+!.env.example

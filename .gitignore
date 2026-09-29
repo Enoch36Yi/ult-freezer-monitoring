@@ -1,0 +1,17 @@
+node_modules/
+.DS_Store
+*.log
+web/.env.local
+firmware/include/prototype22_wifi.h
+firmware/.pio/
+.claude/
+__pycache__/
+.next/
+.vercel/
+*.tsbuildinfo
+*.elf
+*.map
+*.pem
+*.key
+**/.env*
+!**/.env.example

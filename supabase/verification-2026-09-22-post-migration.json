@@ -1,0 +1,170 @@
+{
+  "checked_at_utc": "2026-09-23T02:45:48.8029289+00:00",
+  "project_host": "dfxxamgnrimwoumknuxa.supabase.co",
+  "mode": "read_only",
+  "checks": [
+    {
+      "name": "dashboard_project",
+      "passed": true,
+      "detail": "Dashboard and firmware must target the same project."
+    },
+    {
+      "name": "readings_contract",
+      "passed": true,
+      "detail": "Public read succeeded; Content-Range: 0-0/3"
+    },
+    {
+      "name": "history_esp32_ds18b20",
+      "passed": false,
+      "detail": "\r\n{\r\n  \"code\": \"PGRST202\",\r\n  \"details\": \"Searched for the function public.readings_bucketed with parameters p_bucket_seconds, p_end, p_freezer_id, p_sensor_tier, p_start, but no matches were found in the schema cache.\",\r\n  \"hint\": \"Perhaps you meant to call the function public.readings_bucketed(p_bucket_seconds, p_end, p_freezer_id, p_start)\",\r\n  \"message\": \"Could not find the function public.readings_bucketed(p_bucket_seconds, p_end, p_freezer_id, p_sensor_tier, p_start) in the schema cache\"\r\n}"
+    },
+    {
+      "name": "history_imonnit",
+      "passed": false,
+      "detail": "\r\n{\r\n  \"code\": \"PGRST202\",\r\n  \"details\": \"Searched for the function public.readings_bucketed with parameters p_bucket_seconds, p_end, p_freezer_id, p_sensor_tier, p_start, but no matches were found in the schema cache.\",\r\n  \"hint\": \"Perhaps you meant to call the function public.readings_bucketed(p_bucket_seconds, p_end, p_freezer_id, p_start)\",\r\n  \"message\": \"Could not find the function public.readings_bucketed(p_bucket_seconds, p_end, p_freezer_id, p_sensor_tier, p_start) in the schema cache\"\r\n}"
+    },
+    {
+      "name": "history_traxx",
+      "passed": false,
+      "detail": "\r\n{\r\n  \"code\": \"PGRST202\",\r\n  \"details\": \"Searched for the function public.readings_bucketed with parameters p_bucket_seconds, p_end, p_freezer_id, p_sensor_tier, p_start, but no matches were found in the schema cache.\",\r\n  \"hint\": \"Perhaps you meant to call the function public.readings_bucketed(p_bucket_seconds, p_end, p_freezer_id, p_start)\",\r\n  \"message\": \"Could not find the function public.readings_bucketed(p_bucket_seconds, p_end, p_freezer_id, p_sensor_tier, p_start) in the schema cache\"\r\n}"
+    }
+  ],
+  "fleet": [
+    {
+      "freezer_id": 1,
+      "interval_seconds": 60,
+      "state": "offline",
+      "latest": {
+        "id": 600,
+        "temp_c": -84.2,
+        "recorded_at": "2026-09-14T17:00:00-07:00",
+        "received_at": "2026-09-19T01:02:33.800004-07:00"
+      }
+    },
+    {
+      "freezer_id": 2,
+      "interval_seconds": 60,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 3,
+      "interval_seconds": 60,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 4,
+      "interval_seconds": 60,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 5,
+      "interval_seconds": 60,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 6,
+      "interval_seconds": 60,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 7,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 8,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 9,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 10,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 11,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 12,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 13,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 14,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 15,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 16,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 17,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 18,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 19,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 20,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    },
+    {
+      "freezer_id": 21,
+      "interval_seconds": 900,
+      "state": "no_data",
+      "latest": null
+    }
+  ],
+  "limitations": [
+    "Public reads cannot prove RLS policy definitions, write permissions, indexes, migration history, or backups.",
+    "No synthetic research rows are inserted. Physical sensor detection and device-to-database delivery require a real measurement.",
+    "Recent timestamps alone do not establish provenance, calibration, or genuine study data."
+  ]
+}

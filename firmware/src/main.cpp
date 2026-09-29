@@ -1,0 +1,723 @@
+// ---------------------------------------------------------------------------
+// ULT Freezer Monitoring Node
+//
+// ESP32-S3 Supermini + one DS18B20 on GPIO4. The fleet image serves the 21
+// freezers; the separate prototype-22 image serves an isolated bench sensor.
+// Readings are queued in LittleFS while offline and flushed on reconnect.
+// ---------------------------------------------------------------------------
+
+#include <Arduino.h>
+
+#include <ArduinoJson.h>
+#include <ArduinoOTA.h>
+#include <DallasTemperature.h>
+#include <HTTPClient.h>
+#include <LittleFS.h>
+#include <OneWire.h>
+#include <Preferences.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <WiFiManager.h>
+#include <esp_system.h>
+#include <time.h>
+
+#include "config.h"
+#include "queue_presence.h"
+#include "sampling_policy.h"
+#ifdef PROTOTYPE_22
+#include "prototype22_wifi.h"
+#endif
+#ifdef ONEWIRE_DIAG
+#include "onewire_diag.h"
+#endif
+
+// --- Globals ---------------------------------------------------------------
+
+static OneWire g_oneWire(ONEWIRE_PIN);
+static DallasTemperature g_sensors(&g_oneWire);
+static DeviceAddress g_probeAddress;
+static bool g_probeFound = false;
+
+static Preferences g_prefs;
+static int g_freezerId = 0;
+
+static bool g_wifiWasConnected = false;
+static uint32_t g_lastReconnectAttempt = 0;
+static uint32_t g_lastSampleAt = 0;
+static uint32_t g_sampleIntervalMs = FLEET_SAMPLE_INTERVAL_MS;
+static uint32_t g_lastNtpSyncAt = 0;
+static bool g_ntpEverSynced = false;
+
+// The reset reason rides along on the first reading produced after boot, so a
+// node that is brownout-looping shows up in the data instead of just going
+// quiet. Cleared once that reading is either posted or safely queued.
+static String g_pendingResetReason;
+static QueuePresence g_queuePresence;
+
+// --- Small helpers ---------------------------------------------------------
+
+static const char *resetReasonName(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:   return "poweron";
+    case ESP_RST_EXT:       return "external";
+    case ESP_RST_SW:        return "software";
+    case ESP_RST_PANIC:     return "panic";
+    case ESP_RST_INT_WDT:   return "int_wdt";
+    case ESP_RST_TASK_WDT:  return "task_wdt";
+    case ESP_RST_WDT:       return "other_wdt";
+    case ESP_RST_DEEPSLEEP: return "deepsleep";
+    case ESP_RST_BROWNOUT:  return "brownout";
+    case ESP_RST_SDIO:      return "sdio";
+    default:                return "unknown";
+  }
+}
+
+// True once the clock is past 2023-01-01, i.e. NTP has actually landed and the
+// RTC is no longer sitting at the 1970 epoch.
+static bool clockIsValid() {
+  time_t now = time(nullptr);
+  return now > 1672531200;
+}
+
+// RFC 3339 / ISO 8601 in UTC, which is what timestamptz wants.
+static String isoTimestampUtc() {
+  time_t now = time(nullptr);
+  struct tm tmUtc;
+  gmtime_r(&now, &tmUtc);
+  char buf[32];
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tmUtc);
+  return String(buf);
+}
+
+static String apName() {
+  uint64_t mac = ESP.getEfuseMac();
+  char suffix[8];
+  snprintf(suffix, sizeof(suffix), "%04X", (uint16_t)(mac & 0xFFFF));
+  return String(WIFI_PORTAL_AP_PREFIX) + "-" + suffix;
+}
+
+static String otaHostname() {
+#ifdef PROTOTYPE_22
+  return "ult-prototype-22";
+#else
+  char host[32];
+  snprintf(host, sizeof(host), "ult-freezer-%02d", g_freezerId);
+  return String(host);
+#endif
+}
+
+// --- Provisioning ----------------------------------------------------------
+
+static WiFiManager g_wm;
+static WiFiManagerParameter *g_freezerParam = nullptr;
+
+static bool freezerIdIsValid(int id) {
+  return id >= FREEZER_ID_MIN && id <= FREEZER_ID_MAX;
+}
+
+// Parses the portal field strictly: the whole string must be an integer in
+// range, so "12abc" or "" are rejected rather than silently becoming 12 or 0.
+static int parseFreezerId(const char *raw) {
+  if (raw == nullptr) return 0;
+  String s(raw);
+  s.trim();
+  if (s.isEmpty()) return 0;
+  for (size_t i = 0; i < s.length(); i++) {
+    if (!isDigit(s[i])) return 0;
+  }
+  return s.toInt();
+}
+
+static void saveFreezerId(int id) {
+  g_prefs.begin("ult", false);
+  g_prefs.putInt("freezer_id", id);
+  g_prefs.end();
+  g_freezerId = id;
+}
+
+static int loadFreezerId() {
+  g_prefs.begin("ult", true);
+  int id = g_prefs.getInt("freezer_id", 0);
+  g_prefs.end();
+  return id;
+}
+
+static void onPortalParamsSaved() {
+  int id = parseFreezerId(g_freezerParam->getValue());
+  if (freezerIdIsValid(id)) {
+    Serial.printf("[provision] freezer number set to %d\n", id);
+    saveFreezerId(id);
+  } else {
+    Serial.printf("[provision] rejected freezer number '%s' (want %d-%d)\n",
+                  g_freezerParam->getValue(), FREEZER_ID_MIN, FREEZER_ID_MAX);
+  }
+}
+
+// Brings up WiFi and guarantees a valid freezer number before returning.
+//
+// A node that has already been commissioned NEVER opens the blocking portal.
+// If it did, any reboot while the AP happened to be down — a router restart, a
+// building power event, a brownout — would park the node in the portal
+// forever: no sampling, no buffering, no data, until someone physically
+// noticed. On an unattended multi-week study across 21 units that is the worst
+// failure mode in the system. A commissioned node instead starts connecting
+// and drops straight into loop(), where serviceWifi() retries indefinitely and
+// readings buffer to flash meanwhile.
+//
+// To re-provision deliberately, erase NVS: `pio run -t erase`.
+static void provision() {
+#ifdef PROTOTYPE_22
+  // Ignore any Freezer 1 identity and Wi-Fi saved on a previously used board.
+  // Keeping Wi-Fi persistence off also preserves those credentials in NVS if
+  // the original fleet image is restored later.
+  WiFi.persistent(false);
+  Serial.println("[provision] prototype 22, connecting to compiled WiFi");
+  WiFi.begin(PROTOTYPE22_WIFI_SSID, PROTOTYPE22_WIFI_PASSWORD);
+  for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) {
+    delay(250);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("[provision] ip %s\n", WiFi.localIP().toString().c_str());
+  } else {
+    Serial.println("[provision] no AP yet; will keep retrying");
+  }
+  return;
+#else
+  g_freezerId = loadFreezerId();
+
+  if (freezerIdIsValid(g_freezerId)) {
+    Serial.printf("[provision] freezer %d from NVS, connecting\n", g_freezerId);
+    WiFi.begin();  // no args: reuses the stored credentials
+
+    // Brief opportunistic wait so the first reading usually goes out live
+    // rather than to the buffer. Bounded, and failure here is not fatal.
+    for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) {
+      delay(250);
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("[provision] ip %s\n", WiFi.localIP().toString().c_str());
+    } else {
+      Serial.println(
+          "[provision] no AP yet; will keep retrying and buffer meanwhile");
+    }
+    return;
+  }
+
+  // First boot only. Blocking is correct here — someone is standing at the
+  // bench waiting to fill the form in.
+  char idBuf[8] = "";
+  if (freezerIdIsValid(g_freezerId)) {
+    snprintf(idBuf, sizeof(idBuf), "%d", g_freezerId);
+  }
+
+  static const char kHint[] =
+      "<p style='margin:0 0 6px'>Which freezer is this node on? "
+      "Enter a whole number from 1 to 21.</p>";
+
+  g_freezerParam = new WiFiManagerParameter(
+      "freezer_id", "Freezer number (1-21)", idBuf, 4,
+      "type='number' min='1' max='21' step='1' required");
+  static WiFiManagerParameter hint(kHint);
+
+  g_wm.addParameter(&hint);
+  g_wm.addParameter(g_freezerParam);
+  g_wm.setSaveParamsCallback(onPortalParamsSaved);
+  g_wm.setConfigPortalBlocking(true);
+  g_wm.setConfigPortalTimeout(0);  // stay in the portal until provisioned
+  g_wm.setBreakAfterConfig(true);
+  g_wm.setTitle("ULT Freezer Node");
+
+  const String ap = apName();
+  Serial.printf("[provision] portal AP: %s\n", ap.c_str());
+
+  // autoConnect() returns straight away when NVS already holds credentials.
+  if (!g_wm.autoConnect(ap.c_str())) {
+    Serial.println("[provision] portal exited without a connection, restarting");
+    ESP.restart();
+  }
+
+  // Credentials can be saved from a previous life while the freezer number
+  // never was (or was entered out of range). Force the portal until it is set.
+  while (!freezerIdIsValid(g_freezerId)) {
+    Serial.println("[provision] no valid freezer number yet, reopening portal");
+    if (!g_wm.startConfigPortal(ap.c_str())) {
+      Serial.println("[provision] portal exited, restarting");
+      ESP.restart();
+    }
+    g_freezerId = loadFreezerId();
+  }
+
+  Serial.printf("[provision] freezer %d, ip %s\n", g_freezerId,
+                WiFi.localIP().toString().c_str());
+#endif
+}
+
+// --- Time ------------------------------------------------------------------
+
+static void syncNtp(bool blocking) {
+  configTzTime(TZ_SPEC, NTP_SERVER_1, NTP_SERVER_2);
+  g_lastNtpSyncAt = millis();
+
+  if (!blocking) return;
+
+  Serial.print("[ntp] syncing");
+  for (int i = 0; i < 30 && !clockIsValid(); i++) {
+    delay(500);
+    Serial.print('.');
+  }
+  Serial.println();
+
+  if (clockIsValid()) {
+    g_ntpEverSynced = true;
+    Serial.printf("[ntp] %s\n", isoTimestampUtc().c_str());
+  } else {
+    // Not fatal: readings go out without recorded_at and the database stamps
+    // them on insert. See buildReading().
+    Serial.println("[ntp] sync failed, falling back to server-side timestamps");
+  }
+}
+
+// --- Offline queue ---------------------------------------------------------
+
+static void mountFilesystem() {
+  if (!LittleFS.begin(true)) {
+    Serial.println("[fs] mount failed even after format; buffering disabled");
+    return;
+  }
+  Serial.printf("[fs] mounted, %u bytes free\n",
+                (unsigned)(LittleFS.totalBytes() - LittleFS.usedBytes()));
+
+  // A power cut between remove() and rename() in flushQueue() or
+  // trimQueueIfNeeded() leaves only the temp file, which was fully written and
+  // closed before the remove, so adopt it. If both files exist the cut came
+  // while the temp file was still being written; the original queue is the
+  // complete copy. It may repeat readings already posted, which share their
+  // recorded_at with the stored row, so nothing is lost and repeats are
+  // identifiable.
+  bool hasQueue = LittleFS.exists(QUEUE_PATH);
+  if (LittleFS.exists(QUEUE_TMP_PATH)) {
+    if (hasQueue) {
+      LittleFS.remove(QUEUE_TMP_PATH);
+      Serial.println("[queue] discarded partial temp file from interrupted write");
+    } else if (LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
+      hasQueue = true;
+      Serial.println("[queue] recovered queue from temp file after interrupted flush");
+    }
+  }
+  g_queuePresence.onMount(hasQueue);
+}
+
+// Drops the oldest half of the queue when it hits the cap. Losing the oldest
+// readings is the right trade when a node has been offline long enough to fill
+// flash: the recent history is what anyone will look at first.
+static void trimQueueIfNeeded() {
+  if (!g_queuePresence.hasData()) return;
+  File f = LittleFS.open(QUEUE_PATH, FILE_READ);
+  if (!f) return;
+  const size_t size = f.size();
+  if (size < QUEUE_MAX_BYTES) {
+    f.close();
+    return;
+  }
+
+  Serial.printf("[queue] %u bytes, trimming oldest half\n", (unsigned)size);
+  f.seek(size / 2);
+  f.readStringUntil('\n');  // discard the partial line we landed in
+
+  File out = LittleFS.open(QUEUE_TMP_PATH, FILE_WRITE);
+  if (!out) {
+    f.close();
+    return;
+  }
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    line.trim();
+    if (!line.isEmpty()) {
+      out.println(line);
+    }
+  }
+  out.close();
+  f.close();
+
+  LittleFS.remove(QUEUE_PATH);
+  LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH);
+}
+
+static void enqueueReading(const String &json) {
+  trimQueueIfNeeded();
+  File f = LittleFS.open(QUEUE_PATH, FILE_APPEND);
+  if (!f) {
+    Serial.println("[queue] could not open queue file; reading dropped");
+    return;
+  }
+  f.println(json);
+  f.close();
+  g_queuePresence.onBuffered();
+  Serial.println("[queue] buffered reading to LittleFS");
+}
+
+static size_t queuedCount() {
+  File f = LittleFS.open(QUEUE_PATH, FILE_READ);
+  if (!f) return 0;
+  size_t n = 0;
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    line.trim();
+    if (!line.isEmpty()) n++;
+  }
+  f.close();
+  return n;
+}
+
+// --- Posting ---------------------------------------------------------------
+
+// Posts one already-serialized JSON object to the readings table.
+static bool postJson(const String &body) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  WiFiClientSecure client;
+  // No cert bundle on the device. The payload is non-sensitive telemetry and
+  // the key is publishable, so TLS here is transport hygiene, not secrecy.
+  client.setInsecure();
+
+  HTTPClient http;
+  http.setTimeout(HTTP_TIMEOUT_MS);
+  http.setConnectTimeout(HTTP_TIMEOUT_MS);
+
+  if (!http.begin(client, SUPABASE_URL SUPABASE_READINGS_PATH)) {
+    Serial.println("[http] begin failed");
+    return false;
+  }
+
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("apikey", SUPABASE_ANON_KEY);
+  http.addHeader("Authorization", "Bearer " SUPABASE_ANON_KEY);
+  http.addHeader("Prefer", "return=minimal");
+
+  const int status = http.POST(body);
+  const bool ok = (status >= 200 && status < 300);
+
+  if (!ok) {
+    Serial.printf("[http] POST failed, status %d: %s\n", status,
+                  http.errorToString(status).c_str());
+    if (status > 0) {
+      Serial.printf("[http] body: %s\n", http.getString().c_str());
+    }
+  }
+
+  http.end();
+  return ok;
+}
+
+// Pushes queued readings oldest-first, in batches. Stops at the first failed
+// batch and keeps it plus everything after it, so ordering is never scrambled
+// and nothing is acknowledged that the server did not accept.
+//
+// Batching matters: a full buffer can hold thousands of readings, and at one
+// TLS handshake per reading it would take hours to drain. One array
+// insert per 50 readings turns that into minutes.
+static void flushQueue() {
+  if (!g_queuePresence.hasData()) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  const size_t pending = queuedCount();
+  if (pending == 0) {
+    LittleFS.remove(QUEUE_PATH);
+    g_queuePresence.onFlushRemaining(0);
+    return;
+  }
+  Serial.printf("[queue] flushing %u buffered readings\n", (unsigned)pending);
+
+  File in = LittleFS.open(QUEUE_PATH, FILE_READ);
+  if (!in) return;
+
+  size_t sent = 0;
+  size_t batches = 0;
+  bool stalled = false;
+  // File offset of the first reading in the batch being built. On failure we
+  // rewind here so the whole batch is preserved, not half-acknowledged.
+  size_t batchStart = in.position();
+
+  while (in.available() && !stalled) {
+    String body = "[";
+    size_t inBatch = 0;
+    batchStart = in.position();
+
+    while (in.available() && inBatch < QUEUE_FLUSH_BATCH) {
+      String line = in.readStringUntil('\n');
+      line.trim();
+      if (line.isEmpty()) continue;
+      if (inBatch > 0) body += ',';
+      body += line;
+      inBatch++;
+    }
+
+    if (inBatch == 0) break;
+    body += ']';
+
+    if (postJson(body)) {
+      sent += inBatch;
+      batches++;
+      ArduinoOTA.handle();
+      if (batches >= QUEUE_FLUSH_MAX_BATCHES) {
+        // Yield to loop() so sampling and OTA are not starved; the rest goes
+        // out on the next retry, which serviceQueue() schedules.
+        stalled = true;
+      }
+    } else {
+      in.seek(batchStart);  // nothing in this batch was accepted
+      stalled = true;
+    }
+  }
+
+  // Copy whatever is left, verbatim and in order, into the replacement file.
+  size_t kept = 0;
+  File out = LittleFS.open(QUEUE_TMP_PATH, FILE_WRITE);
+  if (!out) {
+    in.close();
+    Serial.println("[queue] could not open temp file; queue left intact");
+    return;
+  }
+  while (in.available()) {
+    String line = in.readStringUntil('\n');
+    line.trim();
+    if (line.isEmpty()) continue;
+    out.println(line);
+    kept++;
+  }
+  out.close();
+  in.close();
+
+  // Remove-then-rename leaves a window where only the temp file exists;
+  // mountFilesystem() adopts it on the next boot.
+  LittleFS.remove(QUEUE_PATH);
+  if (kept > 0) {
+    LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH);
+  } else {
+    LittleFS.remove(QUEUE_TMP_PATH);
+  }
+  g_queuePresence.onFlushRemaining(kept);
+
+  Serial.printf("[queue] flushed %u, %u still buffered\n", (unsigned)sent,
+                (unsigned)kept);
+}
+
+// Retries a backlog that did not clear in one pass. Without this a flush that
+// hit its batch cap would sit untouched until the next WiFi reconnect, which
+// on a stable network may never come.
+static void serviceQueue() {
+  static uint32_t lastAttempt = 0;
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (!g_queuePresence.hasData()) return;
+  const uint32_t now = millis();
+  if (now - lastAttempt < QUEUE_FLUSH_RETRY_MS) return;
+  lastAttempt = now;
+  flushQueue();
+}
+
+// --- Sampling --------------------------------------------------------------
+
+static void initSensor() {
+  g_sensors.begin();
+  g_sensors.setResolution(DS18B20_RESOLUTION);
+  g_sensors.setWaitForConversion(true);
+
+  if (g_sensors.getDeviceCount() > 0 && g_sensors.getAddress(g_probeAddress, 0)) {
+    g_probeFound = true;
+    Serial.printf("[sensor] DS18B20 found on GPIO%d\n", ONEWIRE_PIN);
+  } else {
+    Serial.println("[sensor] no DS18B20 on the bus; check DQ wiring and the 6.8k pull-up");
+  }
+#ifdef ONEWIRE_DIAG
+  // Once at boot as a baseline, then on every failed re-scan (each sample).
+  oneWireDiagnose(g_oneWire, ONEWIRE_PIN);
+#endif
+}
+
+static String buildReading(float tempC) {
+  JsonDocument doc;
+#ifdef PROTOTYPE_22
+  doc["prototype_id"] = PROTOTYPE_ID;
+#else
+  doc["freezer_id"] = g_freezerId;
+#endif
+  doc["sensor_tier"] = SENSOR_TIER;
+  // Fixed 3 decimals, well inside the DS18B20's 0.0625 C step, and avoids
+  // float round-trip noise in the JSON.
+  doc["temp_c"] = serialized(String(tempC, 3));
+  doc["rssi"] = WiFi.RSSI();
+
+  if (clockIsValid()) {
+    doc["recorded_at"] = isoTimestampUtc();
+  }
+  // else: omit it and let the column default (now()) stamp it server-side
+  // rather than writing a 1970 timestamp.
+
+  if (!g_pendingResetReason.isEmpty()) {
+    doc["reset_reason"] = g_pendingResetReason;
+  }
+
+  String out;
+  serializeJson(doc, out);
+  return out;
+}
+
+static void sampleAndSend() {
+  if (!g_probeFound) {
+    // Recovery path: re-scan in case the probe was reseated.
+    initSensor();
+    if (!g_probeFound) return;
+  }
+
+  g_sensors.requestTemperatures();
+  const float tempC = g_sensors.getTempC(g_probeAddress);
+
+  if (tempC == DEVICE_DISCONNECTED_C || tempC < TEMP_VALID_MIN_C ||
+      tempC > TEMP_VALID_MAX_C) {
+    Serial.printf("[sensor] bad reading (%.2f C), skipping\n", tempC);
+    g_probeFound = false;
+    return;
+  }
+
+  const String payload = buildReading(tempC);
+  Serial.printf("[reading] %s\n", payload.c_str());
+
+  if (WiFi.status() == WL_CONNECTED && postJson(payload)) {
+    Serial.println("[reading] posted");
+  } else {
+    enqueueReading(payload);
+  }
+
+  // Either way the reset reason is now attached to a reading that will be
+  // delivered, so it should not repeat on the next sample.
+  g_pendingResetReason = "";
+}
+
+// --- WiFi lifecycle --------------------------------------------------------
+
+static bool g_otaStarted = false;
+static void initOta();
+
+static void onWifiConnected() {
+  Serial.printf("[wifi] connected, ip %s, rssi %d\n",
+                WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  if (!g_ntpEverSynced) {
+    syncNtp(true);
+  }
+  // mDNS and the OTA listener need a live network, so they start here rather
+  // than unconditionally in setup() — a node that booted while the AP was down
+  // still picks up OTA the moment the network returns.
+  if (!g_otaStarted) {
+    initOta();
+    g_otaStarted = true;
+  }
+  flushQueue();
+}
+
+static void serviceWifi() {
+  const bool connected = (WiFi.status() == WL_CONNECTED);
+
+  if (connected && !g_wifiWasConnected) {
+    g_wifiWasConnected = true;
+    onWifiConnected();
+    return;
+  }
+
+  if (!connected) {
+    if (g_wifiWasConnected) {
+      Serial.println("[wifi] link lost, buffering to LittleFS");
+      g_wifiWasConnected = false;
+    }
+    const uint32_t now = millis();
+    if (now - g_lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL_MS) {
+      g_lastReconnectAttempt = now;
+      Serial.println("[wifi] reconnecting");
+      // begin() not reconnect(): after a boot with the AP down there is no
+      // prior connection to re-establish, and reconnect() is a no-op there.
+#ifdef PROTOTYPE_22
+      WiFi.begin(PROTOTYPE22_WIFI_SSID, PROTOTYPE22_WIFI_PASSWORD);
+#else
+      WiFi.begin();
+#endif
+    }
+  }
+}
+
+static void serviceNtp() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (millis() - g_lastNtpSyncAt < NTP_RESYNC_INTERVAL_MS) return;
+  Serial.println("[ntp] periodic resync");
+  syncNtp(false);
+  if (clockIsValid()) g_ntpEverSynced = true;
+}
+
+static void initOta() {  // NOLINT — forward-declared above
+  ArduinoOTA.setHostname(otaHostname().c_str());
+  ArduinoOTA.onStart([]() { Serial.println("[ota] update starting"); });
+  ArduinoOTA.onEnd([]() { Serial.println("[ota] update complete"); });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("[ota] error %u\n", error);
+  });
+  ArduinoOTA.begin();
+  Serial.printf("[ota] listening as %s.local\n", otaHostname().c_str());
+}
+
+// --- Arduino entry points --------------------------------------------------
+
+void setup() {
+  Serial.begin(115200);
+  delay(300);
+
+  const esp_reset_reason_t reason = esp_reset_reason();
+  g_pendingResetReason = resetReasonName(reason);
+  Serial.printf("\n[boot] ULT freezer node, reset reason: %s\n",
+                g_pendingResetReason.c_str());
+
+  mountFilesystem();
+  initSensor();
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.setSleep(false);  // steadier latency and RSSI for a mains-powered node
+
+  provision();
+#ifdef PROTOTYPE_22
+  g_sampleIntervalMs = CORE_SAMPLE_INTERVAL_MS;
+  Serial.printf("[sampling] prototype %d interval %lu seconds\n",
+                PROTOTYPE_ID,
+                static_cast<unsigned long>(g_sampleIntervalMs / 1000UL));
+#else
+  g_sampleIntervalMs = sampleIntervalMs(g_freezerId);
+  Serial.printf("[sampling] freezer %d interval %lu seconds\n", g_freezerId,
+                static_cast<unsigned long>(g_sampleIntervalMs / 1000UL));
+#endif
+
+  g_wifiWasConnected = (WiFi.status() == WL_CONNECTED);
+  if (g_wifiWasConnected) {
+    syncNtp(true);
+    initOta();
+    g_otaStarted = true;
+    flushQueue();
+  }
+  // If there is no network yet, onWifiConnected() does all of the above the
+  // moment one appears. Sampling starts either way.
+
+  // Take the first reading immediately rather than waiting a full interval.
+  g_lastSampleAt = millis() - g_sampleIntervalMs;
+}
+
+void loop() {
+  ArduinoOTA.handle();
+  serviceWifi();
+  serviceNtp();
+  serviceQueue();
+
+  const uint32_t now = millis();
+  if (now - g_lastSampleAt >= g_sampleIntervalMs) {
+    g_lastSampleAt = now;
+    sampleAndSend();
+  }
+
+  delay(20);
+}
