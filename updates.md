@@ -1,6 +1,28 @@
 # ULT freezer project — cross-machine handoff
 
-Last updated: 2026-09-29 02:10 UTC. Read this first in Codex on the desktop or laptop,
+## 2026-09-29 private GitHub release
+
+- Repository: `https://github.com/Enoch36Yi/ult-freezer-monitoring` (**private**).
+  Initial `main` commit: `893637cf6af2a6df27322714ecfe320c60d1b292`.
+  `v0.1.0` is a GitHub **prerelease** with no binary assets.
+- Git working checkout used for publication:
+  `C:\Users\yieno\FreezersFirmwareGitRelease-20260929-141116` (outside
+  OneDrive). The OneDrive project folder itself is not a Git checkout; future
+  edits there do not automatically reach GitHub. Blake Bedford is taking over
+  software/firmware fixes and should work from a Git clone/branch.
+- Staged 87 source/documentation/CAD files. Private Wi-Fi header,
+  `web/.env.local`, generated files, and credential-bearing binaries were not
+  committed. The staged files were hash-compared against the source folder
+  before the initial commit (zero mismatches). A direct scan found no copy of
+  the local prototype Wi-Fi password in staged files.
+- Verification from the off-OneDrive checkout: 6 firmware native tests,
+  8 automation tests, 9 web tests, TypeScript check, Next.js production
+  build, and `esp32-s3`, `prototype-22`, `prototype-22-diag` builds passed.
+  No device was flashed and no live ingestion was claimed.
+- Remaining gates are in `TODO.md`, especially a genuine Prototype 22
+  temperature row and a sensor qualified for ULT conditions.
+
+Last updated: 2026-09-29 21:19 UTC. Read this first in Codex on the desktop or laptop,
 and in Claude Code. This is a status snapshot, not proof that external systems
 still have the same state; recheck them before changing or claiming anything.
 Task list: `TODO.md`. Bench-session sequence: `docs/BENCH_DAY_RUNBOOK.md`.

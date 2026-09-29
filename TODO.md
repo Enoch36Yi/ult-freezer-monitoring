@@ -37,8 +37,10 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
 - [ ] S4 Data integrity: replay-safe observation ID / dedup key, clock-invalid flag,
       TLS validation (currently `setInsecure()`), OTA authentication decision,
       migration ledger, backup + restore test (B13)
-- [ ] S5 Reproducibility: put the project under Git or a dated snapshot process
-      with firmware hash manifest
+- [x] S5 Git repository established: private
+      `Enoch36Yi/ult-freezer-monitoring`, initial snapshot `893637cf` and
+      `v0.1.0` prerelease (2026-09-29). The working Git checkout is outside
+      OneDrive; firmware hash/deployment manifests remain open.
 
 ## Phase A: three pilot fleet nodes (2 from IDs 1-6, 1 from IDs 7-21)
 
