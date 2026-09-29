@@ -25,6 +25,7 @@
 #include "config.h"
 #include "queue_presence.h"
 #include "sampling_policy.h"
+#include "supabase_root_ca.h"
 #if __has_include("device_security.h")
 #include "device_security.h"
 #define DEVICE_SECURITY_CONFIGURED 1
@@ -452,7 +453,7 @@ static bool postJson(const String &body) {
   }
 
   WiFiClientSecure client;
-  client.setInsecure();
+  client.setCACert(SUPABASE_ROOT_CA);
 
   HTTPClient http;
   http.setTimeout(HTTP_TIMEOUT_MS);
