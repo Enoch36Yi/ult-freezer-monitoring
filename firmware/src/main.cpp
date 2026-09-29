@@ -426,9 +426,7 @@ static void syncNtp(bool blocking) {
     g_ntpEverSynced = true;
     Serial.printf("[ntp] %s\n", isoTimestampUtc().c_str());
   } else {
-    // Not fatal: readings go out without recorded_at and the database stamps
-    // them on insert. See buildReading().
-    Serial.println("[ntp] sync failed, falling back to server-side timestamps");
+    Serial.println("[ntp] sync failed; timestamped readings remain paused");
   }
 }
 
@@ -762,12 +760,8 @@ static String buildReading(float tempC) {
   // float round-trip noise in the JSON.
   doc["temp_c"] = serialized(String(tempC, 3));
   doc["rssi"] = WiFi.RSSI();
-
-  if (clockIsValid()) {
-    doc["recorded_at"] = isoTimestampUtc();
-  }
-  // else: omit it and let the column default (now()) stamp it server-side
-  // rather than writing a 1970 timestamp.
+  doc["recorded_at"] = isoTimestampUtc();
+  doc["clock_valid"] = true;
 
   if (!g_pendingResetReason.isEmpty()) {
     doc["reset_reason"] = g_pendingResetReason;
@@ -781,6 +775,10 @@ static String buildReading(float tempC) {
 static void sampleAndSend() {
   if (!g_observationIdentityReady) {
     Serial.println("[obs] observation identity unavailable; skipping reading");
+    return;
+  }
+  if (!clockIsValid()) {
+    Serial.println("[reading] clock invalid; waiting for NTP before sampling");
     return;
   }
   if (!g_probeFound) {
@@ -865,6 +863,13 @@ static void serviceWifi() {
 
 static void serviceNtp() {
   if (WiFi.status() != WL_CONNECTED) return;
+  if (!clockIsValid()) {
+    if (millis() - g_lastNtpSyncAt >= 60000UL) {
+      Serial.println("[ntp] retrying before allowing measurements");
+      syncNtp(false);
+    }
+    return;
+  }
   if (millis() - g_lastNtpSyncAt < NTP_RESYNC_INTERVAL_MS) return;
   Serial.println("[ntp] periodic resync");
   syncNtp(false);

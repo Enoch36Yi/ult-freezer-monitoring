@@ -98,7 +98,8 @@ Serial should show, in order:
 [provision] freezer 7, ip 10.0.x.x
 [reading] posted
 ```
-`[reading] posted` means sensor, WiFi, clock and Supabase all work.
+`[reading] posted` means sensor, WiFi, a valid NTP clock, and the authenticated
+ingestion route all work.
 
 **B8. Label the enclosure**
 

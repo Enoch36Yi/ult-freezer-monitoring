@@ -111,10 +111,10 @@ methodology if its element is not a DS18B20.
    versus study status, calibration reference, and placement history. Separate
    device-health messages from valid temperature observations so a missing probe
    can be reported without inventing a temperature.
-5. Finish timestamp provenance for offline-upload behavior. The device now sends
-   a boot/sample observation ID and the database deduplicates retries. Still
-   distinguish measurement time from received time, flag unsynchronized clocks,
-   and retain source/vendor identifiers and import batches
+5. The device now sends a boot/sample observation ID, a clock-valid flag, and a
+   real measurement timestamp; the database deduplicates retries and refuses
+   timestamp-less ingestion. Still retain source/vendor identifiers and import
+   batches
    for commercial sensor data; do not assume vendor imports are already implemented.
 7. Verify available backup/restore capabilities and implement a documented raw-data
    export procedure with row counts, UTC boundaries, checksums, and restore tests.

@@ -11,6 +11,7 @@ type Reading = {
   prototype_id?: number;
   device_id?: string;
   observation_id?: string;
+  clock_valid?: boolean;
   sensor_tier?: string;
   temp_c?: number;
   rssi?: number;
@@ -49,7 +50,7 @@ function signatureMatches(body: string, secret: string, supplied: string) {
 function validReading(reading: Reading, deviceId: string) {
   const allowed = new Set([
     "freezer_id", "prototype_id", "sensor_tier", "temp_c", "rssi",
-    "reset_reason", "recorded_at", "device_id", "observation_id",
+    "reset_reason", "recorded_at", "device_id", "observation_id", "clock_valid",
   ]);
   if (Object.keys(reading).some((key) => !allowed.has(key))) return false;
   if (reading.sensor_tier !== SENSOR_TIER ||
@@ -61,6 +62,10 @@ function validReading(reading: Reading, deviceId: string) {
       (typeof reading.reset_reason !== "string" || reading.reset_reason.length > 32)) return false;
   if (reading.recorded_at !== undefined &&
       (typeof reading.recorded_at !== "string" || Number.isNaN(Date.parse(reading.recorded_at)))) return false;
+  if (reading.clock_valid !== undefined && reading.clock_valid !== true) return false;
+  // A legacy queued row may omit clock_valid, but it must still carry the
+  // device's actual measurement timestamp. Never let the server invent one.
+  if (reading.recorded_at === undefined) return false;
   const escapedDeviceId = deviceId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (reading.device_id !== deviceId ||
       typeof reading.observation_id !== "string" ||
@@ -111,6 +116,7 @@ export async function POST(request: Request) {
   if (!supabaseUrl || !serviceRoleKey) return jsonError(503);
 
   const table = deviceId === "prototype-22" ? "prototype_readings" : "readings";
+  const normalizedRows = rows.map((row) => ({ ...(row as Reading), clock_valid: true }));
   const upstream = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
     method: "POST",
     headers: {
@@ -119,7 +125,7 @@ export async function POST(request: Request) {
       "Content-Type": "application/json",
       Prefer: "resolution=ignore-duplicates,return=minimal",
     },
-    body: JSON.stringify(rows),
+    body: JSON.stringify(normalizedRows),
     cache: "no-store",
   });
   if (!upstream.ok) {

@@ -13,6 +13,7 @@ create table public.prototype_readings (
   rssi integer,
   reset_reason text,
   recorded_at timestamptz not null default now(),
+  clock_valid boolean not null default true,
   received_at timestamptz not null default now()
 );
 

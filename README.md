@@ -172,9 +172,10 @@ Notes on the columns:
   offsets. The dashboard has a sensor selector and filters on exactly one tier.
   Only the ESP32 tier has firmware here; ingestion for the other two is not
   built, so selecting them shows no data until it is.
-- **`recorded_at`** is the device clock (NTP-synced); **`received_at`** is the
-  database clock. They diverge by exactly the buffering delay when a node has
-  been offline, which makes a backfill easy to spot.
+- **`recorded_at`** is the NTP-synced device clock and **`clock_valid`** records
+  that provenance; **`received_at`** is the database clock. Devices pause
+  measurement uploads until NTP succeeds, so buffering preserves measurement
+  time instead of replacing it with receipt time.
 - **`reset_reason`** is set only on the first reading after a boot, so a node
   that is brownout-looping shows up in the data instead of silently vanishing.
 
@@ -264,9 +265,9 @@ blocked on the network) to hit a specific node.
   LittleFS. At ~180 bytes per reading, the 1 MB queue holds roughly **3.8
   days** for core IDs 1–6 or **58 days** for fleet IDs 7–21. Past the cap the
   oldest half is dropped, so the most recent history always survives.
-- **Clock:** NTP at boot and a resync every 6 hours, so `recorded_at` stays
-  meaningful through long drops. If NTP never lands, the field is omitted and
-  Postgres stamps the row on insert rather than writing a 1970 timestamp.
+- **Clock:** NTP at boot and a resync every 6 hours. If NTP never lands, the
+  node pauses measurement uploads rather than creating a row with an invented
+  server-side timestamp.
 - **Flash budget:** the image uses ~82% of the 1.25 MB app partition. Two app
   partitions are what make OTA possible, so keep additions modest — or move to a
   larger partition table if the board has 8 MB of flash.
