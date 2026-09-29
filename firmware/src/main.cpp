@@ -179,6 +179,7 @@ static bool signBody(const String &body, const String &secret, char output[65]) 
 
 static WiFiManager g_wm;
 static WiFiManagerParameter *g_freezerParam = nullptr;
+static WiFiManagerParameter *g_ingestSecretParam = nullptr;
 
 static bool freezerIdIsValid(int id) {
   return id >= FREEZER_ID_MIN && id <= FREEZER_ID_MAX;
@@ -211,6 +212,39 @@ static int loadFreezerId() {
   return id;
 }
 
+#ifndef PROTOTYPE_22
+static String loadIngestSecret() {
+  g_prefs.begin("ult", true);
+  String secret = g_prefs.getString("ingest_secret", "");
+  g_prefs.end();
+  return secret;
+}
+
+static void saveIngestSecret(const String &secret) {
+  g_prefs.begin("ult", false);
+  g_prefs.putString("ingest_secret", secret);
+  g_prefs.end();
+  g_ingestSecret = secret;
+}
+#endif
+
+static bool provisionApPasswordIsUsable() {
+#if DEVICE_SECURITY_CONFIGURED
+  const String password = PROVISION_AP_PASSWORD;
+  return password.length() >= 12 && !password.startsWith("replace-");
+#else
+  return false;
+#endif
+}
+
+static const char *provisionApPassword() {
+#if DEVICE_SECURITY_CONFIGURED
+  return PROVISION_AP_PASSWORD;
+#else
+  return nullptr;
+#endif
+}
+
 static void onPortalParamsSaved() {
   int id = parseFreezerId(g_freezerParam->getValue());
   if (freezerIdIsValid(id)) {
@@ -220,6 +254,15 @@ static void onPortalParamsSaved() {
     Serial.printf("[provision] rejected freezer number '%s' (want %d-%d)\n",
                   g_freezerParam->getValue(), FREEZER_ID_MIN, FREEZER_ID_MAX);
   }
+#ifndef PROTOTYPE_22
+  const String secret = g_ingestSecretParam->getValue();
+  if (ingestSecretIsUsable(secret)) {
+    saveIngestSecret(secret);
+    Serial.println("[provision] device ingest secret saved");
+  } else {
+    Serial.println("[provision] rejected device ingest secret; need 32+ random characters");
+  }
+#endif
 }
 
 // Brings up WiFi and guarantees a valid freezer number before returning.
@@ -253,8 +296,9 @@ static void provision() {
   return;
 #else
   g_freezerId = loadFreezerId();
+  g_ingestSecret = loadIngestSecret();
 
-  if (freezerIdIsValid(g_freezerId)) {
+  if (freezerIdIsValid(g_freezerId) && ingestSecretIsUsable(g_ingestSecret)) {
     Serial.printf("[provision] freezer %d from NVS, connecting\n", g_freezerId);
     WiFi.begin();  // no args: reuses the stored credentials
 
@@ -273,12 +317,20 @@ static void provision() {
     return;
   }
 
+  if (!provisionApPasswordIsUsable()) {
+    Serial.println("[provision] disabled: configure a provisioning AP password");
+    ESP.restart();
+    return;
+  }
+
   // First boot only. Blocking is correct here — someone is standing at the
   // bench waiting to fill the form in.
   char idBuf[8] = "";
   if (freezerIdIsValid(g_freezerId)) {
     snprintf(idBuf, sizeof(idBuf), "%d", g_freezerId);
   }
+  char secretBuf[129] = "";
+  g_ingestSecret.toCharArray(secretBuf, sizeof(secretBuf));
 
   static const char kHint[] =
       "<p style='margin:0 0 6px'>Which freezer is this node on? "
@@ -287,10 +339,14 @@ static void provision() {
   g_freezerParam = new WiFiManagerParameter(
       "freezer_id", "Freezer number (1-21)", idBuf, 4,
       "type='number' min='1' max='21' step='1' required");
+  g_ingestSecretParam = new WiFiManagerParameter(
+      "ingest_secret", "Device ingest secret", secretBuf, 128,
+      "type='password' minlength='32' required");
   static WiFiManagerParameter hint(kHint);
 
   g_wm.addParameter(&hint);
   g_wm.addParameter(g_freezerParam);
+  g_wm.addParameter(g_ingestSecretParam);
   g_wm.setSaveParamsCallback(onPortalParamsSaved);
   g_wm.setConfigPortalBlocking(true);
   g_wm.setConfigPortalTimeout(0);  // stay in the portal until provisioned
@@ -301,20 +357,21 @@ static void provision() {
   Serial.printf("[provision] portal AP: %s\n", ap.c_str());
 
   // autoConnect() returns straight away when NVS already holds credentials.
-  if (!g_wm.autoConnect(ap.c_str())) {
+  if (!g_wm.autoConnect(ap.c_str(), provisionApPassword())) {
     Serial.println("[provision] portal exited without a connection, restarting");
     ESP.restart();
   }
 
   // Credentials can be saved from a previous life while the freezer number
   // never was (or was entered out of range). Force the portal until it is set.
-  while (!freezerIdIsValid(g_freezerId)) {
-    Serial.println("[provision] no valid freezer number yet, reopening portal");
-    if (!g_wm.startConfigPortal(ap.c_str())) {
+  while (!freezerIdIsValid(g_freezerId) || !ingestSecretIsUsable(g_ingestSecret)) {
+    Serial.println("[provision] identity or device secret missing, reopening portal");
+    if (!g_wm.startConfigPortal(ap.c_str(), provisionApPassword())) {
       Serial.println("[provision] portal exited, restarting");
       ESP.restart();
     }
     g_freezerId = loadFreezerId();
+    g_ingestSecret = loadIngestSecret();
   }
 
   Serial.printf("[provision] freezer %d, ip %s\n", g_freezerId,

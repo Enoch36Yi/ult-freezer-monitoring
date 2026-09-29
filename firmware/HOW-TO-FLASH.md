@@ -29,6 +29,14 @@ pio run
 ```
 First run downloads the ESP32-S3 toolchain (~5-10 min). Done once, not per node.
 
+**A2b. Configure device security** — copy
+`firmware/include/device_security.example.h` to the ignored
+`firmware/include/device_security.h`. Replace the provisioning AP password and
+OTA hash. For fleet nodes, use a different 32+ character ingest secret per
+freezer and register the same device-to-secret mapping in
+`INGEST_DEVICE_SECRETS_JSON` on the server. Prototype 22 uses its compiled
+`DEVICE_INGEST_SECRET` from this header.
+
 **A3. Database** — already done. Table and function are live.
 
 **A4. Put the dashboard somewhere you can reach it**
@@ -73,14 +81,15 @@ before going further.
 Serial prints `[provision] portal AP: ULT-Freezer-Setup-XXXX`. That suffix is
 how you identify this specific node.
 
-**B5. Join that AP on a phone**
+**B5. Join that password-protected AP on a phone**
 
-Open network, no password. Portal opens by itself — if not, go to
+Use the provisioning AP password from `device_security.h`. The portal opens by itself — if not, go to
 `http://192.168.4.1`.
 
 **B6. Fill in the portal**
 
-**Configure WiFi** → SSID, password, **Freezer number (1-21)** → **Save**
+**Configure WiFi** → SSID, password, **Freezer number (1-21)**, unique device
+ingest secret → **Save**
 
 **B7. Confirm it took**
 

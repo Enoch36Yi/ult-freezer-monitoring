@@ -210,15 +210,23 @@ pio device monitor       # 115200 baud, over the S3's native USB-CDC
 
 ### Provisioning walkthrough (first boot, or any node with no saved config)
 
+Before building, copy `firmware/include/device_security.example.h` to the
+ignored `device_security.h`. Set the provisioning AP password and OTA hash
+there. For fleet nodes, generate a different 32+ character ingest secret for
+each freezer and keep the same device-to-secret mapping in the server's
+`INGEST_DEVICE_SECRETS_JSON` environment variable.
+
 1. Power the node. It starts a WiFi access point named **`ULT-Freezer-Setup-XXXX`**
    (the suffix is the last 4 hex of the MAC, so several nodes can be set up in
    the same room without colliding).
 2. On a phone or laptop, join that AP. The captive portal opens on its own; if
    it does not, browse to **`http://192.168.4.1`**.
-3. Tap **Configure WiFi**. The form has the usual SSID and password fields plus
-   a **"Freezer number (1-21)"** field.
-4. Enter the network credentials and the freezer number, then **Save**.
-5. The node saves both to NVS, joins the network, syncs its clock over NTP, and
+3. Join the AP with the provisioning password configured in `device_security.h`.
+4. Tap **Configure WiFi**. The form has the usual SSID and password fields plus
+   **"Freezer number (1-21)"** and **"Device ingest secret"** fields.
+5. Enter the network credentials, freezer number, and that node's unique ingest
+   secret, then **Save**.
+6. The node saves the identity and ingest secret to NVS, joins the network, syncs its clock over NTP, and
    starts posting. The serial monitor shows `[provision] freezer N, ip ...`.
 
 A number outside 1–21, or one with stray characters, is rejected and the portal

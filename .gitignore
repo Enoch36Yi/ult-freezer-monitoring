@@ -3,6 +3,7 @@ node_modules/
 *.log
 web/.env.local
 firmware/include/prototype22_wifi.h
+firmware/include/device_security.h
 firmware/.pio/
 .claude/
 __pycache__/
