@@ -227,12 +227,13 @@ node later, erase it with `pio run -t erase` and reflash.
 
 ### Updating firmware over the network
 
-Once a node is on the network it advertises itself over mDNS as
-`ult-freezer-NN.local` (`NN` = its freezer number) and accepts ArduinoOTA
-uploads, so units do not have to be pulled out from behind a freezer:
+Once a node is on the network and has a configured OTA password hash, it
+advertises itself over mDNS as `ult-freezer-NN.local` (`NN` = its freezer
+number) and accepts authenticated ArduinoOTA uploads:
 
 ```bash
-pio run -e esp32-s3-ota -t upload --upload-port ult-freezer-07.local
+pio run -e esp32-s3-ota -t upload --upload-port ult-freezer-07.local \
+  --upload-password "$OTA_PASSWORD"
 ```
 
 The `esp32-s3-ota` env in [firmware/platformio.ini](firmware/platformio.ini)

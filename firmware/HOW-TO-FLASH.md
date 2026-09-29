@@ -138,8 +138,13 @@ immediate, so a longer wait indicates a connection or posting problem.
 # Updating firmware later, over the air
 
 ```bash
-pio run -e esp32-s3-ota -t upload --upload-port ult-freezer-07.local
+pio run -e esp32-s3-ota -t upload --upload-port ult-freezer-07.local \
+  --upload-password "$OTA_PASSWORD"
 ```
+
+OTA stays disabled until the ignored `include/device_security.h` supplies a
+64-character SHA-256 `OTA_PASSWORD_HASH`. Keep the matching cleartext password
+in a password manager or shell secret; never put either value in Git.
 Freezer number and WiFi credentials survive an OTA update.
 
 ---

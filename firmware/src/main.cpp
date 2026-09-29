@@ -128,6 +128,22 @@ static bool ingestSecretIsUsable(const String &secret) {
   return secret.length() >= 32 && !secret.startsWith("replace-");
 }
 
+static bool otaPasswordHashIsUsable() {
+#if DEVICE_SECURITY_CONFIGURED
+  const String hash = OTA_PASSWORD_HASH;
+  if (hash.length() != 64 || hash.startsWith("replace-")) return false;
+  for (size_t i = 0; i < hash.length(); i++) {
+    const char c = hash[i];
+    const bool hex = (c >= '0' && c <= '9') ||
+                     (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    if (!hex) return false;
+  }
+  return true;
+#else
+  return false;
+#endif
+}
+
 static String ingestSecret() {
 #ifdef PROTOTYPE_22
 #if DEVICE_SECURITY_CONFIGURED
@@ -651,7 +667,7 @@ static void sampleAndSend() {
 // --- WiFi lifecycle --------------------------------------------------------
 
 static bool g_otaStarted = false;
-static void initOta();
+static bool initOta();
 
 static void onWifiConnected() {
   Serial.printf("[wifi] connected, ip %s, rssi %d\n",
@@ -663,8 +679,7 @@ static void onWifiConnected() {
   // than unconditionally in setup() — a node that booted while the AP was down
   // still picks up OTA the moment the network returns.
   if (!g_otaStarted) {
-    initOta();
-    g_otaStarted = true;
+    g_otaStarted = initOta();
   }
   flushQueue();
 }
@@ -706,8 +721,13 @@ static void serviceNtp() {
   if (clockIsValid()) g_ntpEverSynced = true;
 }
 
-static void initOta() {  // NOLINT — forward-declared above
+static bool initOta() {  // NOLINT — forward-declared above
+  if (!otaPasswordHashIsUsable()) {
+    Serial.println("[ota] disabled: configure a valid OTA_PASSWORD_HASH");
+    return false;
+  }
   ArduinoOTA.setHostname(otaHostname().c_str());
+  ArduinoOTA.setPasswordHash(OTA_PASSWORD_HASH);
   ArduinoOTA.onStart([]() { Serial.println("[ota] update starting"); });
   ArduinoOTA.onEnd([]() { Serial.println("[ota] update complete"); });
   ArduinoOTA.onError([](ota_error_t error) {
@@ -715,6 +735,7 @@ static void initOta() {  // NOLINT — forward-declared above
   });
   ArduinoOTA.begin();
   Serial.printf("[ota] listening as %s.local\n", otaHostname().c_str());
+  return true;
 }
 
 // --- Arduino entry points --------------------------------------------------
@@ -750,8 +771,7 @@ void setup() {
   g_wifiWasConnected = (WiFi.status() == WL_CONNECTED);
   if (g_wifiWasConnected) {
     syncNtp(true);
-    initOta();
-    g_otaStarted = true;
+    g_otaStarted = initOta();
     flushQueue();
   }
   // If there is no network yet, onWifiConnected() does all of the above the
