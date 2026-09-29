@@ -25,8 +25,8 @@ export function FreezerGrid() {
       setReadings(latest);
       setLastUpdated(Date.now());
       setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load readings");
+    } catch {
+      setError("Could not load readings right now. Try again later.");
     } finally {
       setLoading(false);
       setNow(Date.now());

@@ -72,15 +72,9 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
           (r) => r.status === "rejected",
         ) as PromiseRejectedResult | undefined;
 
-        setError(
-          failed
-            ? failed.reason instanceof Error
-              ? failed.reason.message
-              : String(failed.reason)
-            : null,
-        );
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load history");
+        setError(failed ? "Could not load readings right now. Try again later." : null);
+      } catch {
+        setError("Could not load readings right now. Try again later.");
       } finally {
         setLoading(false);
         setNow(Date.now());

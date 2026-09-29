@@ -19,8 +19,8 @@ export function PrototypeCard() {
     try {
       setReading(await fetchPrototypeLatest());
       setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load prototype readings");
+    } catch {
+      setError("Could not load prototype readings right now. Try again later.");
     }
     setNow(Date.now());
   }, []);
