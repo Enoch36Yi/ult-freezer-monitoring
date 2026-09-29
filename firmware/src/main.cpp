@@ -62,6 +62,7 @@ static bool g_ntpEverSynced = false;
 // quiet. Cleared once that reading is either posted or safely queued.
 static String g_pendingResetReason;
 static QueuePresence g_queuePresence;
+static bool g_filesystemReady = false;
 
 // --- Small helpers ---------------------------------------------------------
 
@@ -406,45 +407,55 @@ static void syncNtp(bool blocking) {
 
 // --- Offline queue ---------------------------------------------------------
 
+// Recover a fully-written replacement file after a power cut or a failed
+// remove/rename sequence. If the original queue still exists it wins because
+// it is the last known complete copy.
+static bool recoverQueueTemp() {
+  if (!g_filesystemReady) return false;
+  const bool hasQueue = LittleFS.exists(QUEUE_PATH);
+  if (!LittleFS.exists(QUEUE_TMP_PATH)) return true;
+  if (hasQueue) {
+    if (!LittleFS.remove(QUEUE_TMP_PATH)) {
+      Serial.println("[queue] could not discard stale temp file; preserving queue");
+      return false;
+    }
+    Serial.println("[queue] discarded partial temp file from interrupted write");
+    return true;
+  }
+  if (!LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
+    Serial.println("[queue] could not recover temp queue file");
+    return false;
+  }
+  Serial.println("[queue] recovered queue from temp file after interrupted write");
+  return true;
+}
+
 static void mountFilesystem() {
-  if (!LittleFS.begin(true)) {
-    Serial.println("[fs] mount failed even after format; buffering disabled");
+  if (!LittleFS.begin(false)) {
+    Serial.println("[fs] mount failed; refusing to format so buffered data is preserved");
     return;
   }
+  g_filesystemReady = true;
   Serial.printf("[fs] mounted, %u bytes free\n",
                 (unsigned)(LittleFS.totalBytes() - LittleFS.usedBytes()));
 
-  // A power cut between remove() and rename() in flushQueue() or
-  // trimQueueIfNeeded() leaves only the temp file, which was fully written and
-  // closed before the remove, so adopt it. If both files exist the cut came
-  // while the temp file was still being written; the original queue is the
-  // complete copy. It may repeat readings already posted, which share their
-  // recorded_at with the stored row, so nothing is lost and repeats are
-  // identifiable.
-  bool hasQueue = LittleFS.exists(QUEUE_PATH);
-  if (LittleFS.exists(QUEUE_TMP_PATH)) {
-    if (hasQueue) {
-      LittleFS.remove(QUEUE_TMP_PATH);
-      Serial.println("[queue] discarded partial temp file from interrupted write");
-    } else if (LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
-      hasQueue = true;
-      Serial.println("[queue] recovered queue from temp file after interrupted flush");
-    }
-  }
-  g_queuePresence.onMount(hasQueue);
+  recoverQueueTemp();
+  g_queuePresence.onMount(LittleFS.exists(QUEUE_PATH));
 }
 
 // Drops the oldest half of the queue when it hits the cap. Losing the oldest
 // readings is the right trade when a node has been offline long enough to fill
 // flash: the recent history is what anyone will look at first.
-static void trimQueueIfNeeded() {
-  if (!g_queuePresence.hasData()) return;
+static bool trimQueueIfNeeded() {
+  if (!g_filesystemReady) return false;
+  if (!g_queuePresence.hasData()) return true;
+  if (!recoverQueueTemp()) return false;
   File f = LittleFS.open(QUEUE_PATH, FILE_READ);
-  if (!f) return;
+  if (!f) return false;
   const size_t size = f.size();
   if (size < QUEUE_MAX_BYTES) {
     f.close();
-    return;
+    return true;
   }
 
   Serial.printf("[queue] %u bytes, trimming oldest half\n", (unsigned)size);
@@ -454,36 +465,60 @@ static void trimQueueIfNeeded() {
   File out = LittleFS.open(QUEUE_TMP_PATH, FILE_WRITE);
   if (!out) {
     f.close();
-    return;
+    return false;
   }
+  bool complete = true;
   while (f.available()) {
     String line = f.readStringUntil('\n');
     line.trim();
     if (!line.isEmpty()) {
-      out.println(line);
+      if (out.println(line) == 0) {
+        complete = false;
+        break;
+      }
     }
   }
   out.close();
   f.close();
 
-  LittleFS.remove(QUEUE_PATH);
-  LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH);
+  if (!complete) {
+    Serial.println("[queue] trim write failed; original queue preserved");
+    return false;
+  }
+  if (!LittleFS.remove(QUEUE_PATH)) {
+    Serial.println("[queue] trim could not remove original queue; preserving both copies");
+    return false;
+  }
+  if (!LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
+    Serial.println("[queue] trim could not install replacement queue");
+    return recoverQueueTemp();
+  }
+  return true;
 }
 
-static void enqueueReading(const String &json) {
-  trimQueueIfNeeded();
+static bool enqueueReading(const String &json) {
+  if (!g_filesystemReady || !trimQueueIfNeeded() || !recoverQueueTemp()) {
+    Serial.println("[queue] filesystem unavailable; reading not acknowledged");
+    return false;
+  }
   File f = LittleFS.open(QUEUE_PATH, FILE_APPEND);
   if (!f) {
-    Serial.println("[queue] could not open queue file; reading dropped");
-    return;
+    Serial.println("[queue] could not open queue file; reading not acknowledged");
+    return false;
   }
-  f.println(json);
+  const size_t written = f.println(json);
   f.close();
+  if (written != json.length() + 1) {
+    Serial.println("[queue] incomplete write; reading not acknowledged");
+    return false;
+  }
   g_queuePresence.onBuffered();
   Serial.println("[queue] buffered reading to LittleFS");
+  return true;
 }
 
 static size_t queuedCount() {
+  if (!g_filesystemReady || !recoverQueueTemp()) return 0;
   File f = LittleFS.open(QUEUE_PATH, FILE_READ);
   if (!f) return 0;
   size_t n = 0;
@@ -546,13 +581,17 @@ static bool postJson(const String &body) {
 // TLS handshake per reading it would take hours to drain. One array
 // insert per 50 readings turns that into minutes.
 static void flushQueue() {
-  if (!g_queuePresence.hasData()) return;
+  if (!g_filesystemReady || !g_queuePresence.hasData()) return;
   if (WiFi.status() != WL_CONNECTED) return;
+  if (!recoverQueueTemp()) return;
 
   const size_t pending = queuedCount();
   if (pending == 0) {
-    LittleFS.remove(QUEUE_PATH);
-    g_queuePresence.onFlushRemaining(0);
+    if (LittleFS.remove(QUEUE_PATH)) {
+      g_queuePresence.onFlushRemaining(0);
+    } else {
+      Serial.println("[queue] could not remove empty queue file");
+    }
     return;
   }
   Serial.printf("[queue] flushing %u buffered readings\n", (unsigned)pending);
@@ -607,23 +646,42 @@ static void flushQueue() {
     Serial.println("[queue] could not open temp file; queue left intact");
     return;
   }
+  bool complete = true;
   while (in.available()) {
     String line = in.readStringUntil('\n');
     line.trim();
     if (line.isEmpty()) continue;
-    out.println(line);
+    if (out.println(line) == 0) {
+      complete = false;
+      break;
+    }
     kept++;
   }
   out.close();
   in.close();
 
+  if (!complete) {
+    Serial.println("[queue] flush copy failed; original queue preserved");
+    return;
+  }
+
   // Remove-then-rename leaves a window where only the temp file exists;
   // mountFilesystem() adopts it on the next boot.
-  LittleFS.remove(QUEUE_PATH);
+  if (!LittleFS.remove(QUEUE_PATH)) {
+    Serial.println("[queue] flush could not remove original queue; preserving both copies");
+    return;
+  }
   if (kept > 0) {
-    LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH);
+    if (!LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
+      Serial.println("[queue] flush could not install replacement queue");
+      recoverQueueTemp();
+      return;
+    }
   } else {
-    LittleFS.remove(QUEUE_TMP_PATH);
+    if (!LittleFS.remove(QUEUE_TMP_PATH)) {
+      Serial.println("[queue] flushed queue but could not remove empty temp file");
+      return;
+    }
   }
   g_queuePresence.onFlushRemaining(kept);
 
@@ -713,13 +771,13 @@ static void sampleAndSend() {
 
   if (WiFi.status() == WL_CONNECTED && postJson(payload)) {
     Serial.println("[reading] posted");
+    g_pendingResetReason = "";
+  } else if (enqueueReading(payload)) {
+    // The reset reason is cleared only after the line is durably appended.
+    g_pendingResetReason = "";
   } else {
-    enqueueReading(payload);
+    Serial.println("[reading] not delivered or buffered; retaining reset reason");
   }
-
-  // Either way the reset reason is now attached to a reading that will be
-  // delivered, so it should not repeat on the next sample.
-  g_pendingResetReason = "";
 }
 
 // --- WiFi lifecycle --------------------------------------------------------
