@@ -93,20 +93,23 @@ Temperature monitoring cannot by itself prove electrical energy savings.
 
 ### 4. Data integrity and security — production blocker
 
-The current publishable-key model permits anonymous inserts meeting broad table checks. It does not authenticate individual devices. Offline records also need replay-safe identity.
+The original snapshot below identified anonymous inserts and missing replay identity.
+Those findings are superseded in the current tree by the authenticated HMAC
+ingestion route, migrations 003–006, CA-validated TLS, and authenticated OTA.
+The remaining unchecked items are operational or deployment-verification work.
 
 - [ ] Choose and document the accepted threat model for a research pilot.
-- [ ] Define a stable observation ID/deduplication key before fleet rollout.
-- [ ] Store measurement time separately from database receipt time.
-- [ ] Flag unsynchronized clocks rather than silently treating receipt time as measurement time.
+- [x] Define a stable observation ID/deduplication key before fleet rollout.
+- [x] Store measurement time separately from database receipt time.
+- [x] Flag unsynchronized clocks rather than silently treating receipt time as measurement time.
 - [ ] Separate device-health events from valid temperature observations.
 - [ ] Test allowed insert/select and denied update/delete behavior in an isolated or rolled-back test context.
 - [ ] Review grants, constraints, function security, dependencies, and Supabase security/performance advisors.
 - [ ] Reconcile direct live SQL changes with an ordered migration ledger.
 - [ ] Establish raw exports, checksums, retention, access ownership, and a successful restore test.
 - [ ] Keep credentials out of Markdown, screenshots, binaries shared outside the team, and source history.
-- [ ] Decide whether OTA must be authenticated/disabled on the production network; do not rely on network obscurity.
-- [ ] Replace `setInsecure()` TLS behavior with an approved certificate-validation strategy before treating transport integrity as production-grade, or document and accept the limitation explicitly.
+- [x] Require authenticated OTA or keep it disabled; do not rely on network obscurity.
+- [x] Replace `setInsecure()` TLS behavior with CA certificate validation.
 
 ### 5. Reproducibility — publication blocker
 

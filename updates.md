@@ -285,10 +285,11 @@ the methodology file to Dropbox after this edit. Recheck external state afresh.
   was linked or deployed. Do not treat plugin installation as CLI login.
 - At 23:14 UTC, the separate `public.prototype_readings` table and
   `prototype_readings_bucketed` function were applied to project
-  `dfxxamgnrimwoumknuxa`. Verified: table exists, zero prototype rows, RLS
-  on, anon SELECT/INSERT/EXECUTE but no UPDATE/DELETE, public GET and RPC
-  return empty results successfully, Security Advisor has zero findings,
-  and the fleet still has its original three rows. No synthetic data inserted.
+  `dfxxamgnrimwoumknuxa`. Historical state at that time: table exists, zero
+  prototype rows, RLS on, anon SELECT/INSERT/EXECUTE but no UPDATE/DELETE,
+  public GET and RPC return empty results successfully, Security Advisor has
+  zero findings, and the fleet still has its original three rows. Migration
+  003 later removes the anonymous INSERT grant. No synthetic data inserted.
   This was direct SQL execution, not a CLI migration-history entry. The SQL
   SHA-256 is `C2930B02BC463496D9D0BBBA112E9FFDC7D4853709D9ECC86E155C739C1F41CF`.
   The locally built, still-unflashed prototype firmware SHA-256 is
@@ -882,5 +883,7 @@ resides inside the OneDrive-synced folder. The password is intentionally **not
 copied here**. Check that this header exists on the machine building the
 prototype. Its compiled `.bin` also contains the credential; do not publish
 or share that binary. `web/.env.local` is likewise local and may need to be
-present on each machine. Use only the publishable Supabase key in browser and
-firmware; never place an admin/service-role key in either.
+present on each machine. The publishable Supabase key is browser-only; firmware
+now uses per-device HMAC secrets through the ingestion route. Never place an
+admin/service-role key in browser code or firmware; keep it only in the server
+deployment environment.
