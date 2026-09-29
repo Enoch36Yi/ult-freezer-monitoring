@@ -18,12 +18,19 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <WiFiManager.h>
+#include <mbedtls/md.h>
 #include <esp_system.h>
 #include <time.h>
 
 #include "config.h"
 #include "queue_presence.h"
 #include "sampling_policy.h"
+#if __has_include("device_security.h")
+#include "device_security.h"
+#define DEVICE_SECURITY_CONFIGURED 1
+#else
+#define DEVICE_SECURITY_CONFIGURED 0
+#endif
 #ifdef PROTOTYPE_22
 #include "prototype22_wifi.h"
 #endif
@@ -40,6 +47,7 @@ static bool g_probeFound = false;
 
 static Preferences g_prefs;
 static int g_freezerId = 0;
+static String g_ingestSecret;
 
 static bool g_wifiWasConnected = false;
 static uint32_t g_lastReconnectAttempt = 0;
@@ -104,6 +112,50 @@ static String otaHostname() {
   snprintf(host, sizeof(host), "ult-freezer-%02d", g_freezerId);
   return String(host);
 #endif
+}
+
+static String deviceId() {
+#ifdef PROTOTYPE_22
+  return "prototype-22";
+#else
+  char id[16];
+  snprintf(id, sizeof(id), "freezer-%02d", g_freezerId);
+  return String(id);
+#endif
+}
+
+static bool ingestSecretIsUsable(const String &secret) {
+  return secret.length() >= 32 && !secret.startsWith("replace-");
+}
+
+static String ingestSecret() {
+#ifdef PROTOTYPE_22
+#if DEVICE_SECURITY_CONFIGURED
+  return String(DEVICE_INGEST_SECRET);
+#else
+  return String();
+#endif
+#else
+  return g_ingestSecret;
+#endif
+}
+
+static bool signBody(const String &body, const String &secret, char output[65]) {
+  if (!ingestSecretIsUsable(secret)) return false;
+  const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  if (info == nullptr) return false;
+  unsigned char digest[32];
+  const int result = mbedtls_md_hmac(
+      info,
+      reinterpret_cast<const unsigned char *>(secret.c_str()), secret.length(),
+      reinterpret_cast<const unsigned char *>(body.c_str()), body.length(),
+      digest);
+  if (result != 0) return false;
+  for (size_t i = 0; i < sizeof(digest); i++) {
+    snprintf(output + (i * 2), 3, "%02x", digest[i]);
+  }
+  output[64] = '\0';
+  return true;
 }
 
 // --- Provisioning ----------------------------------------------------------
@@ -376,23 +428,28 @@ static size_t queuedCount() {
 static bool postJson(const String &body) {
   if (WiFi.status() != WL_CONNECTED) return false;
 
+  const String secret = ingestSecret();
+  char signature[65];
+  if (!signBody(body, secret, signature)) {
+    Serial.println("[auth] device secret is not configured; refusing telemetry");
+    return false;
+  }
+
   WiFiClientSecure client;
-  // No cert bundle on the device. The payload is non-sensitive telemetry and
-  // the key is publishable, so TLS here is transport hygiene, not secrecy.
   client.setInsecure();
 
   HTTPClient http;
   http.setTimeout(HTTP_TIMEOUT_MS);
   http.setConnectTimeout(HTTP_TIMEOUT_MS);
 
-  if (!http.begin(client, SUPABASE_URL SUPABASE_READINGS_PATH)) {
+  if (!http.begin(client, INGEST_URL)) {
     Serial.println("[http] begin failed");
     return false;
   }
 
   http.addHeader("Content-Type", "application/json");
-  http.addHeader("apikey", SUPABASE_ANON_KEY);
-  http.addHeader("Authorization", "Bearer " SUPABASE_ANON_KEY);
+  http.addHeader("X-Device-Id", deviceId());
+  http.addHeader("X-Device-Signature", signature);
   http.addHeader("Prefer", "return=minimal");
 
   const int status = http.POST(body);
@@ -401,9 +458,6 @@ static bool postJson(const String &body) {
   if (!ok) {
     Serial.printf("[http] POST failed, status %d: %s\n", status,
                   http.errorToString(status).c_str());
-    if (status > 0) {
-      Serial.printf("[http] body: %s\n", http.getString().c_str());
-    }
   }
 
   http.end();

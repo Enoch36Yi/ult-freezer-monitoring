@@ -10,9 +10,8 @@ if (!url || !anonKey) {
   );
 }
 
-// Publishable (anon) key, safe in the browser bundle: row-level security on
-// `readings` is what actually restricts access, and anon has insert + select
-// only — no update, no delete.
+// Publishable (anon) key, safe in the browser bundle for the intentionally
+// public dashboard. Device writes use the authenticated server route instead.
 export const supabase = createClient(url, anonKey, {
   auth: { persistSession: false },
 });

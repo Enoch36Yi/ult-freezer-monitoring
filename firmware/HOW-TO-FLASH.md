@@ -122,7 +122,7 @@ immediate, so a longer wait indicates a connection or posting problem.
 - No setup AP → already provisioned; `pio run -t erase` to wipe
 - Portal reopens after saving → wrong password, 5 GHz, or enterprise auth
 - `POST failed, status 404` → schema not run
-- `POST failed, status 401/403` → key or RLS policy wrong
+- `POST failed, status 401/403` → device secret or ingestion allowlist wrong
 - `[queue] buffered reading` repeatedly → no path to Supabase; data is safe on
   flash and flushes on reconnect (~3.8 days for IDs 1–6; ~58 days for IDs 7–21)
 - Reboot loop → brownout; check the 100 µF cap
