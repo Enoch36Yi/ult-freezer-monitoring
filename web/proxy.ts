@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 const SUPABASE_ORIGIN = "https://dfxxamgnrimwoumknuxa.supabase.co";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Next uses the request nonce when rendering its own scripts. A fresh nonce
   // per response keeps CSP strict without allowing arbitrary inline scripts.
   const nonce = btoa(crypto.randomUUID());
