@@ -16,13 +16,9 @@ create index on public.readings (freezer_id, recorded_at desc);
 
 alter table public.readings enable row level security;
 
--- New projects may require explicit Data API grants in addition to RLS.
-grant select, insert on public.readings to anon;
-
-create policy "anon can insert readings"
-  on public.readings for insert
-  to anon
-  with check (freezer_id between 1 and 21);
+-- Devices write through the authenticated application ingestion route. The
+-- browser's publishable key is read-only, so it cannot spoof observations.
+grant select on public.readings to anon;
 
 create policy "anon can read readings"
   on public.readings for select

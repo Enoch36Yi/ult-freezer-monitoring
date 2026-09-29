@@ -27,11 +27,11 @@ To retain an audit, supply a new filename:
 ./supabase/verify.ps1 -ReportPath './supabase/verification-run-02.json'
 ```
 
-The script reads the existing firmware public API configuration without printing
-the key, checks that the dashboard uses the same project, validates required
-reading columns, checks the latest ESP32 observation for every freezer, and calls
-the tier-specific history function separately for ESP32, iMonnit, and TRAXX.
-It performs only GET requests. It refuses to overwrite an existing report.
+The script reads the local dashboard API configuration without printing the key,
+checks that the dashboard uses the expected project, validates required reading
+columns, checks the latest ESP32 observation for every freezer, and calls the
+tier-specific history function separately for ESP32, iMonnit, and TRAXX. It
+performs only GET requests. It refuses to overwrite an existing report.
 Exit code 1 means an API/configuration contract failed. Fleet status is reported
 separately: successful API checks do not mean hardware commissioning has passed.
 The snapshot timestamp and limitations are included in the JSON output.
@@ -107,15 +107,11 @@ methodology if its element is not a DS18B20.
 3. Verify allowed and denied writes in a rolled-back transaction or isolated test
    area. Never use made-up study rows as production connectivity tests. Public
    read access does not prove insert permissions or device delivery.
-4. Evaluate the current shared public-key ingestion model. The local schema allows
-   public inserts for any valid freezer number; it does not authenticate individual
-   physical devices. Record this limitation and coordinate any device-auth change
-   with the firmware so existing nodes keep working.
-5. Define instrument identity, commissioning state, actual sensor coverage, bench
+4. Define instrument identity, commissioning state, actual sensor coverage, bench
    versus study status, calibration reference, and placement history. Separate
    device-health messages from valid temperature observations so a missing probe
    can be reported without inventing a temperature.
-6. Specify replay-safe record identity and timestamp provenance before changing
+5. Specify replay-safe record identity and timestamp provenance before changing
    offline-upload behavior. Distinguish measurement time from received time and
    flag unsynchronized clocks. Retain source/vendor identifiers and import batches
    for commercial sensor data; do not assume vendor imports are already implemented.

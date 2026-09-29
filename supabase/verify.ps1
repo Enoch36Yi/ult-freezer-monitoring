@@ -1,4 +1,4 @@
-# Read-only contract checks against the same public API used by the devices.
+# Read-only contract checks against the same public read API used by the dashboard.
 # No test readings are inserted and no database configuration is changed.
 [CmdletBinding()]
 param([string]$ReportPath)

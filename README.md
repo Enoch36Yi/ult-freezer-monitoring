@@ -24,11 +24,10 @@ Prototype 22's isolated firmware, database, and verification procedure are in
 before its dashboard card can fetch from Supabase; this is independent of the
 21-freezer `readings` table.
 
-**The whole security model is one publishable key plus row-level security.** The
-same anon key ships in the firmware and in the browser bundle; RLS on `readings`
-and `prototype_readings` allows only `insert` and `select` for the anon role, so
-readings are append-only from both sides. There are no per-device keys, no MQTT
-broker, and no serial or wired data path — WiFi and direct HTTPS to Supabase only.
+**The dashboard uses a publishable key plus row-level security for public reads.**
+Devices use per-device HMAC credentials through the authenticated ingestion route;
+the publishable browser key cannot insert observations. There are no MQTT broker
+or serial/wired data paths — WiFi and HTTPS are the only device transport.
 
 ---
 
@@ -112,11 +111,6 @@ create table readings (
 create index on readings (freezer_id, recorded_at desc);
 
 alter table readings enable row level security;
-
-create policy "anon can insert readings"
-  on readings for insert
-  to anon
-  with check (freezer_id between 1 and 21);
 
 create policy "anon can read readings"
   on readings for select

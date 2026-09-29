@@ -22,11 +22,7 @@ create index prototype_readings_tier_time_idx
 
 alter table public.prototype_readings enable row level security;
 revoke all on public.prototype_readings from public, anon, authenticated;
-grant select, insert on public.prototype_readings to anon;
-
-create policy "anon can insert prototype 22 readings"
-  on public.prototype_readings for insert to anon
-  with check (prototype_id = 22 and sensor_tier = 'esp32_ds18b20');
+grant select on public.prototype_readings to anon;
 
 create policy "anon can read prototype 22 readings"
   on public.prototype_readings for select to anon
