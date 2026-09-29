@@ -9,6 +9,8 @@ const SENSOR_TIER = "esp32_ds18b20";
 type Reading = {
   freezer_id?: number;
   prototype_id?: number;
+  device_id?: string;
+  observation_id?: string;
   sensor_tier?: string;
   temp_c?: number;
   rssi?: number;
@@ -47,7 +49,7 @@ function signatureMatches(body: string, secret: string, supplied: string) {
 function validReading(reading: Reading, deviceId: string) {
   const allowed = new Set([
     "freezer_id", "prototype_id", "sensor_tier", "temp_c", "rssi",
-    "reset_reason", "recorded_at",
+    "reset_reason", "recorded_at", "device_id", "observation_id",
   ]);
   if (Object.keys(reading).some((key) => !allowed.has(key))) return false;
   if (reading.sensor_tier !== SENSOR_TIER ||
@@ -59,6 +61,13 @@ function validReading(reading: Reading, deviceId: string) {
       (typeof reading.reset_reason !== "string" || reading.reset_reason.length > 32)) return false;
   if (reading.recorded_at !== undefined &&
       (typeof reading.recorded_at !== "string" || Number.isNaN(Date.parse(reading.recorded_at)))) return false;
+  const escapedDeviceId = deviceId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (reading.device_id !== deviceId ||
+      typeof reading.observation_id !== "string" ||
+      reading.observation_id.length > 96 ||
+      !new RegExp(`^${escapedDeviceId}-[0-9]+-[0-9]+$`).test(reading.observation_id)) {
+    return false;
+  }
 
   if (deviceId === "prototype-22") {
     return reading.prototype_id === 22 && reading.freezer_id === undefined;
@@ -108,7 +117,7 @@ export async function POST(request: Request) {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      Prefer: "resolution=ignore-duplicates,return=minimal",
     },
     body: JSON.stringify(rows),
     cache: "no-store",

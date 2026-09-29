@@ -4,6 +4,8 @@
 create table public.readings (
   id bigint generated always as identity primary key,
   freezer_id smallint not null check (freezer_id between 1 and 21),
+  device_id text not null,
+  observation_id text not null,
   sensor_tier text not null default 'esp32_ds18b20',
   temp_c numeric not null,
   rssi integer,
@@ -13,6 +15,8 @@ create table public.readings (
 );
 
 create index on public.readings (freezer_id, recorded_at desc);
+create unique index readings_device_observation_uidx
+  on public.readings (device_id, observation_id);
 
 alter table public.readings enable row level security;
 

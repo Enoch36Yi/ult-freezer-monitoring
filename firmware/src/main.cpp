@@ -49,6 +49,9 @@ static bool g_probeFound = false;
 static Preferences g_prefs;
 static int g_freezerId = 0;
 static String g_ingestSecret;
+static uint64_t g_bootId = 0;
+static uint32_t g_sampleSequence = 0;
+static bool g_observationIdentityReady = false;
 
 static bool g_wifiWasConnected = false;
 static uint32_t g_lastReconnectAttempt = 0;
@@ -124,6 +127,30 @@ static String deviceId() {
   snprintf(id, sizeof(id), "freezer-%02d", g_freezerId);
   return String(id);
 #endif
+}
+
+static bool initObservationIdentity() {
+  g_prefs.begin("obs", false);
+  const uint64_t previous = g_prefs.getULong64("boot_id", 0);
+  const uint64_t next = previous + 1;
+  const size_t written = g_prefs.putULong64("boot_id", next);
+  g_prefs.end();
+  if (written == 0) {
+    Serial.println("[obs] could not persist boot counter; refusing telemetry");
+    return false;
+  }
+  g_bootId = next;
+  g_sampleSequence = 0;
+  g_observationIdentityReady = true;
+  return true;
+}
+
+static String observationId(uint32_t sampleSequence) {
+  char id[96];
+  snprintf(id, sizeof(id), "%s-%llu-%lu", deviceId().c_str(),
+           static_cast<unsigned long long>(g_bootId),
+           static_cast<unsigned long>(sampleSequence));
+  return String(id);
 }
 
 static bool ingestSecretIsUsable(const String &secret) {
@@ -728,6 +755,8 @@ static String buildReading(float tempC) {
 #else
   doc["freezer_id"] = g_freezerId;
 #endif
+  doc["device_id"] = deviceId();
+  doc["observation_id"] = observationId(g_sampleSequence);
   doc["sensor_tier"] = SENSOR_TIER;
   // Fixed 3 decimals, well inside the DS18B20's 0.0625 C step, and avoids
   // float round-trip noise in the JSON.
@@ -750,6 +779,10 @@ static String buildReading(float tempC) {
 }
 
 static void sampleAndSend() {
+  if (!g_observationIdentityReady) {
+    Serial.println("[obs] observation identity unavailable; skipping reading");
+    return;
+  }
   if (!g_probeFound) {
     // Recovery path: re-scan in case the probe was reseated.
     initSensor();
@@ -766,6 +799,7 @@ static void sampleAndSend() {
     return;
   }
 
+  ++g_sampleSequence;
   const String payload = buildReading(tempC);
   Serial.printf("[reading] %s\n", payload.c_str());
 
@@ -866,6 +900,7 @@ void setup() {
                 g_pendingResetReason.c_str());
 
   mountFilesystem();
+  g_observationIdentityReady = initObservationIdentity();
   initSensor();
 
   WiFi.mode(WIFI_STA);

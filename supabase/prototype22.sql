@@ -5,6 +5,8 @@ begin;
 create table public.prototype_readings (
   id bigint generated always as identity primary key,
   prototype_id smallint not null default 22 check (prototype_id = 22),
+  device_id text not null,
+  observation_id text not null,
   sensor_tier text not null default 'esp32_ds18b20'
     check (sensor_tier = 'esp32_ds18b20'),
   temp_c numeric not null,
@@ -19,6 +21,8 @@ comment on table public.prototype_readings is
 
 create index prototype_readings_tier_time_idx
   on public.prototype_readings (prototype_id, sensor_tier, recorded_at desc);
+create unique index prototype_device_observation_uidx
+  on public.prototype_readings (device_id, observation_id);
 
 alter table public.prototype_readings enable row level security;
 revoke all on public.prototype_readings from public, anon, authenticated;

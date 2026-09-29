@@ -252,7 +252,7 @@ blocked on the network) to hit a specific node.
 
 - **By freezer ID:** IDs 1–6 read and post every **1 minute**; IDs 7–21
   read and post every **15 minutes**. Each reading contains
-  `{freezer_id, temp_c, rssi, sensor_tier, recorded_at}` and is POSTed to the
+  `{freezer_id, device_id, observation_id, temp_c, rssi, sensor_tier, recorded_at}` and is POSTed to the
   authenticated `/api/ingest` route with a per-device HMAC signature.
 - **On send failure** — no WiFi, request error, timeout — the reading is
   appended to `/queue.jsonl` on LittleFS instead of being dropped.

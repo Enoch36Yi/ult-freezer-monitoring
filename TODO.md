@@ -34,9 +34,10 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
       rated probe + reference calibration, or sign a limitation (B09)
 - [ ] S2 Energy metering: choose subset vs all 21, meter model, Facilities approval (B11)
 - [ ] S3 Signed 21-freezer inventory, device registry, two-person label check (B01, B03)
-- [ ] S4 Data integrity: replay-safe observation ID / dedup key, clock-invalid flag,
-      TLS validation (currently `setInsecure()`), OTA authentication decision,
-      migration ledger, backup + restore test (B13)
+- [ ] S4 Data integrity: clock-invalid flag, migration ledger, backup + restore
+      test (B13)
+      (replay-safe observation IDs, TLS validation, and OTA authentication are now
+      implemented in separate commits.)
 - [x] S5 Git repository established: private
       `Enoch36Yi/ult-freezer-monitoring`, initial snapshot `893637cf` and
       `v0.1.0` prerelease (2026-09-29). The working Git checkout is outside
