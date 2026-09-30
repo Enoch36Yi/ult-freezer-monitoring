@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { Buffer } from "node:buffer";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,7 @@ function configuredSecrets(): Record<string, string> | null {
     const entries = Object.entries(parsed as Record<string, unknown>);
     if (entries.some(([id, secret]) =>
       !/^(?:freezer-(?:0[1-9]|1[0-9]|2[01])|prototype-22)$/.test(id) ||
-      typeof secret !== "string" || secret.length < 32,
+      typeof secret !== "string" || secret.length < 32 || secret.startsWith("replace-"),
     )) return null;
     return Object.fromEntries(entries) as Record<string, string>;
   } catch {
@@ -45,6 +46,32 @@ function signatureMatches(body: string, secret: string, supplied: string) {
   const expected = createHmac("sha256", secret).update(body).digest();
   const actual = Buffer.from(supplied, "hex");
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+async function readBodyLimited(request: Request): Promise<string | null> {
+  if (!request.body) return null;
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), totalBytes).toString("utf8");
 }
 
 function validReading(reading: Reading, deviceId: string) {
@@ -92,8 +119,8 @@ export async function POST(request: Request) {
   if (length && (!/^\d+$/.test(length) || Number(length) > MAX_BODY_BYTES)) {
     return jsonError(413);
   }
-  const body = await request.text();
-  if (!body || new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES) {
+  const body = await readBodyLimited(request);
+  if (!body) {
     return jsonError(413);
   }
   if (!signatureMatches(body, secret, signature)) return jsonError(401);
