@@ -85,7 +85,7 @@ export function FreezerGrid() {
           className="rounded-lg border border-hairline bg-surface p-3 text-sm"
           style={{ color: "var(--status-critical)" }}
         >
-          ■ Could not reach Supabase: {error}
+          ■ {error}
         </div>
       )}
 

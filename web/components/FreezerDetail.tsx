@@ -140,7 +140,7 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
           className="mt-4 rounded-lg border border-hairline bg-surface p-3 text-sm"
           style={{ color: "var(--status-critical)" }}
         >
-          ■ Could not load readings: {error}
+          ■ {error}
         </div>
       )}
 

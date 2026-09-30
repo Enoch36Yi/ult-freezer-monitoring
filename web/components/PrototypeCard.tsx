@@ -37,7 +37,7 @@ export function PrototypeCard() {
     <section className="mt-8 border-t border-hairline pt-6" aria-label="Prototype">
       <h2 className="mb-1 text-lg font-semibold text-ink">Prototype 22</h2>
       <p className="mb-4 text-sm text-ink-secondary">Bench instrument · separate from the 21-freezer study</p>
-      {error && <p role="alert" className="mb-3 text-sm text-ink-secondary">Could not load prototype: {error}</p>}
+      {error && <p role="alert" className="mb-3 text-sm text-ink-secondary">{error}</p>}
       <Link href="/prototype/22" className="group flex max-w-[245px] flex-col gap-3 rounded-lg border border-hairline bg-surface p-4 transition-colors hover:border-series focus:outline-none focus-visible:ring-2 focus-visible:ring-series">
         <div className="flex items-baseline justify-between">
           <span className="text-sm font-semibold text-ink-secondary">Prototype 22</span>
