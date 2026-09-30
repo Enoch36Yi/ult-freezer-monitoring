@@ -42,7 +42,7 @@ $now = [DateTimeOffset]::UtcNow
 $fleet = [System.Collections.Generic.List[object]]::new()
 try {
     $headers['Prefer'] = 'count=exact'
-    $response = Read-Api '/rest/v1/readings?select=id,freezer_id,sensor_tier,temp_c,rssi,reset_reason,recorded_at,received_at&limit=1'
+    $response = Read-Api '/rest/v1/readings?select=id,freezer_id,sensor_tier,temp_c,rssi,reset_reason,firmware_version,recorded_at,received_at&limit=1'
     Add-Check 'readings_contract' $true ('Public read succeeded; Content-Range: ' + ($response.Headers['Content-Range'] -join ', '))
 } catch { Add-Check 'readings_contract' $false (Get-ApiFailure $_) }
 $headers.Remove('Prefer')
@@ -50,7 +50,7 @@ $headers.Remove('Prefer')
 for ($id = 1; $id -le 21; $id++) {
     $interval = if ($id -le 6) { 60 } else { 900 }
     try {
-        $response = Read-Api ('/rest/v1/readings?select=id,temp_c,recorded_at,received_at&freezer_id=eq.' + $id + '&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1')
+        $response = Read-Api ('/rest/v1/readings?select=id,temp_c,firmware_version,recorded_at,received_at&freezer_id=eq.' + $id + '&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1')
         $rows = @(ConvertFrom-JsonArray $response.Content)
         $latest = if ($rows.Count -gt 0) { $rows[0] } else { $null }
         $state = 'no_data'
@@ -66,6 +66,21 @@ for ($id = 1; $id -le 21; $id++) {
         Add-Check "freezer_${id}_read" $false (Get-ApiFailure $_)
         $fleet.Add([pscustomobject]@{ freezer_id = $id; interval_seconds = $interval; state = 'query_failed'; latest = $null })
     }
+}
+
+$prototypeLatest = $null
+try {
+    $response = Read-Api '/rest/v1/prototype_readings?select=id,prototype_id,sensor_tier,temp_c,firmware_version,recorded_at,received_at&prototype_id=eq.22&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1'
+    $rows = @(ConvertFrom-JsonArray $response.Content)
+    $prototypeLatest = if ($rows.Count -gt 0) { $rows[0] } else { $null }
+    $state = 'no_data'
+    if ($null -ne $prototypeLatest) {
+        $age = ($now - [DateTimeOffset]::Parse($prototypeLatest.received_at)).TotalSeconds
+        $state = if ($age -lt -60) { 'future_timestamp' } elseif ($age -le 180) { 'recent' } elseif ($age -le 720) { 'stale' } else { 'offline' }
+    }
+    Add-Check 'prototype_22_read' $true ("Prototype 22 public read succeeded; state=$state.")
+} catch {
+    Add-Check 'prototype_22_read' $false (Get-ApiFailure $_)
 }
 
 # GET invokes a STABLE, read-only RPC. Explicitly test every dashboard tier.
@@ -85,12 +100,25 @@ foreach ($tier in @('esp32_ds18b20', 'imonnit', 'traxx')) {
     } catch { Add-Check "history_$tier" $false (Get-ApiFailure $_) }
 }
 
+try {
+    $response = Read-Api ("/rest/v1/rpc/prototype_readings_bucketed?p_prototype_id=22&p_start=$start&p_end=$end&p_bucket_seconds=900&p_sensor_tier=esp32_ds18b20")
+    $buckets = @(ConvertFrom-JsonArray $response.Content)
+    $required = @('bucket_time', 'avg_temp_c', 'min_temp_c', 'max_temp_c', 'reading_count')
+    foreach ($bucket in $buckets) {
+        foreach ($field in $required) {
+            if ($field -notin $bucket.PSObject.Properties.Name) { throw "Missing Prototype 22 RPC output field: $field" }
+        }
+    }
+    Add-Check 'history_prototype_22' $true ("Prototype 22 history returned $($buckets.Count) buckets; empty data is permitted.")
+} catch { Add-Check 'history_prototype_22' $false (Get-ApiFailure $_) }
+
 $report = [pscustomobject]@{
     checked_at_utc = $now.ToString('o')
     project_host = ([uri]$baseUrl).Host
     mode = 'read_only'
     checks = @($checks.ToArray())
     fleet = @($fleet.ToArray())
+    prototype_22 = $prototypeLatest
     limitations = @(
         'Public reads cannot prove RLS policy definitions, write permissions, indexes, migration history, or backups.'
         'No synthetic research rows are inserted. Physical sensor detection and device-to-database delivery require a real measurement.'
