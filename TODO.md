@@ -46,8 +46,8 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
 
 - [ ] Firmware hardening: strict ID parse tests; queue truncation / partial-line /
       power-loss tests; verify offline retention at both cadences (B06, B07).
-      Boot-time recovery of an orphaned queue temp file was added 2026-09-29
-      (compiles for all images; not yet observed on a board)
+      Boot-time recovery of orphaned temp files and incomplete queue tails was
+      added 2026-09-29 (not yet observed on a board)
 - [ ] OTA pilot: USB-flash the rollback-enabled bootloader baseline once, then
       validate a canary OTA, 30-second health confirmation, and recovery from a
       deliberately failed first boot before any fleet rollout. See
@@ -87,8 +87,8 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
 - [x] Laptop compatibility fixes (2026-09-29): staging moved off `%LOCALAPPDATA%`
       (invisible to Store Python); `verify.ps1` fixed for PowerShell 5.1;
       `check-local.ps1` Latin-1 fix; docs no longer call the absent `pwsh`
-- [ ] Add a Prototype 22 check to `supabase/verify.ps1` (the preflight and
-      `prototype-check.ps1` cover it for now)
+- [x] Add a Prototype 22 check to `supabase/verify.ps1` (2026-09-29; public
+      table read and bounded-history RPC contract are now checked)
 - [ ] Apply `supabase/migrations` ordering ledger to the direct-SQL changes
 - [ ] Add a Prototype 22 entry to `supabase/OPERATIONS.md` (currently fleet-only)
 - [ ] Consider excluding `firmware/.pio` and `web/node_modules` from OneDrive sync

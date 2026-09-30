@@ -1,5 +1,27 @@
 # ULT freezer project — cross-machine handoff
 
+## 2026-09-29 post-audit hardening — pushed, no hardware touched
+
+- Pushed isolated fixes on `main`: `c793fe3` OTA rebind after Wi-Fi loss,
+  `4aaaa99` interrupted/partial queue recovery,
+  `2bd2ab0` receipt-time liveness, `af79e92` receipt-time indexes,
+  `5c1dc7c` environment-derived CSP origin, `b70852b` bounded ingest bodies and
+  placeholder-secret rejection, `97130d2` duplicate UI error cleanup,
+  `5db555f` firmware version in telemetry/schema/dashboard,
+  `962aa79` schema and commissioning docs, and `fa8efc9` Prototype 22
+  verification coverage. Every commit was pushed to `origin/main` separately.
+- Added migrations `007_latest_received_index.sql` and
+  `008_firmware_version.sql`. They are committed but **not applied to the live
+  Supabase project** from this session; apply them in order before deploying
+  the matching dashboard/API version.
+- Current checks: repository whitespace check passed and the web unit suite
+  passed (3 tests). PlatformIO, TypeScript, PowerShell, live SQL, Vercel, OTA,
+  and hardware checks were not run here. No device was flashed and no live
+  service state was changed.
+- The first pilot still needs the real firmware build, one authorized USB
+  rollback-enabled baseline flash, a canary OTA/recovery test, and the genuine
+  Prototype 22 bench acceptance described below.
+
 ## 2026-09-29 private GitHub release
 
 - Repository: `https://github.com/Enoch36Yi/ult-freezer-monitoring` (**private**).
