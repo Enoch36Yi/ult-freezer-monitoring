@@ -71,6 +71,7 @@ static bool g_otaValidationPending = false;
 static uint32_t g_otaValidationStartedAt = 0;
 static bool g_otaInProgress = false;
 static uint8_t g_otaLastProgress = 255;
+static bool g_otaStarted = false;
 
 // --- Small helpers ---------------------------------------------------------
 
@@ -154,7 +155,9 @@ static void initOtaValidation() {
 }
 
 static void serviceOtaValidation() {
-  if (!g_otaValidationPending || !g_filesystemReady || g_otaInProgress) return;
+  if (!g_otaValidationPending || !g_filesystemReady ||
+      !g_observationIdentityReady || !g_otaStarted || !g_wifiWasConnected ||
+      g_otaInProgress) return;
   if (millis() - g_otaValidationStartedAt < OTA_HEALTH_WINDOW_MS) return;
 
   const esp_err_t result = esp_ota_mark_app_valid_cancel_rollback();
@@ -855,7 +858,6 @@ static void sampleAndSend() {
 
 // --- WiFi lifecycle --------------------------------------------------------
 
-static bool g_otaStarted = false;
 static bool initOta();
 
 static void onWifiConnected() {
@@ -884,6 +886,13 @@ static void serviceWifi() {
 
   if (!connected) {
     if (g_wifiWasConnected) {
+      if (g_otaStarted && !g_otaInProgress) {
+        // ArduinoOTA owns a UDP socket and the mDNS advertisement. Rebind both
+        // after a link loss so a DHCP address change does not strand OTA.
+        ArduinoOTA.end();
+        g_otaStarted = false;
+        Serial.println("[ota] stopped with WiFi link; will rebind on reconnect");
+      }
       Serial.println("[wifi] link lost, buffering to LittleFS");
       g_wifiWasConnected = false;
     }
