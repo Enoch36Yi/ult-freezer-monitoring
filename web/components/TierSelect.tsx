@@ -48,7 +48,7 @@ export function TierSelect({
       <select
         value={tier}
         onChange={(e) => onChange(e.target.value as SensorTier)}
-        className="rounded-md border border-hairline bg-surface px-2 py-1 text-xs font-medium text-ink"
+        className="min-h-11 rounded-md border border-hairline bg-surface px-2 py-1 text-xs font-medium text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-series"
       >
         {SENSOR_TIERS.map((t) => (
           <option key={t.value} value={t.value}>

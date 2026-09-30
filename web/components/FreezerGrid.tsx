@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FreezerCard } from "./FreezerCard";
 import { fetchLatestPerFreezer } from "@/lib/readings";
 import { nodeStatus, relativeTime } from "@/lib/format";
@@ -15,25 +15,54 @@ export function FreezerGrid() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   // Recomputed on every refresh so relative timestamps keep ticking.
   const [now, setNow] = useState(() => Date.now());
   const [tier, setTier] = useSensorTier();
+  const requestId = useRef(0);
+  const readingsRef = useRef(readings);
 
   const refresh = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    setRefreshing(true);
     try {
       const latest = await fetchLatestPerFreezer(tier);
-      setReadings(latest);
-      setLastUpdated(Date.now());
-      setError(null);
+      if (currentRequest !== requestId.current) return;
+      const hadPreviousReadings = readingsRef.current.size > 0;
+      setReadings((previous) => {
+        const next = new Map(previous);
+        for (const row of latest.readings.values()) next.set(row.freezer_id, row);
+        readingsRef.current = next;
+        return next;
+      });
+      if (latest.readings.size > 0) setLastUpdated(Date.now());
+      setError(
+        latest.failedIds.length > 0
+          ? hadPreviousReadings
+            ? `${latest.failedIds.length} freezer${latest.failedIds.length === 1 ? "" : "s"} could not refresh. Showing the last successful values.`
+            : `Refresh failed for ${latest.failedIds.length} freezer${latest.failedIds.length === 1 ? "" : "s"}. No previous readings are available.`
+          : null,
+      );
     } catch {
+      if (currentRequest !== requestId.current) return;
       setError("Could not load readings right now. Try again later.");
     } finally {
+      if (currentRequest !== requestId.current) return;
       setLoading(false);
+      setRefreshing(false);
       setNow(Date.now());
     }
   }, [tier]);
 
   useEffect(() => {
+    // A tier switch must not leave values from the previous stream visible
+    // while the new stream is loading.
+    const emptyReadings = new Map<number, LatestReading>();
+    readingsRef.current = emptyReadings;
+    setReadings(emptyReadings);
+    setLastUpdated(null);
+    setError(null);
+    setLoading(true);
     refresh();
     const poll = setInterval(refresh, REFRESH_MS);
     // Tick the clock more often than we poll so "3 min ago" doesn't sit stale
@@ -57,9 +86,11 @@ export function FreezerGrid() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-ink-secondary">
-        <span>
-          {counts.live} of {FREEZER_IDS.length} reporting
-          {counts.attention > 0 && (
+        <span aria-live="polite">
+          {loading && readings.size === 0
+            ? `Loading ${FREEZER_IDS.length} freezers…`
+            : `${counts.live} of ${FREEZER_IDS.length} reporting`}
+          {!loading && counts.attention > 0 && (
             <span className="text-ink-muted">
               {" "}
               · {counts.attention} need attention
@@ -71,7 +102,9 @@ export function FreezerGrid() {
           <span className="text-xs text-ink-muted tabular">
             {loading
               ? "Loading…"
-              : `Updated ${relativeTime(
+              : refreshing
+                ? "Refreshing…"
+              : `Last successful update ${relativeTime(
                   lastUpdated ? new Date(lastUpdated).toISOString() : null,
                   now,
                 )} · refreshes every ${REFRESH_INTERVAL_LABEL}`}
@@ -85,7 +118,20 @@ export function FreezerGrid() {
           className="rounded-lg border border-hairline bg-surface p-3 text-sm"
           style={{ color: "var(--status-critical)" }}
         >
-          ■ {error}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex min-w-0 items-start gap-2">
+              <span className="mt-1 shrink-0" aria-hidden="true">■</span>
+              <span>{error}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              disabled={refreshing}
+              className="min-h-11 rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:border-series hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-series disabled:cursor-wait disabled:opacity-60"
+            >
+              {refreshing ? "Retrying…" : "Try again"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -95,6 +141,7 @@ export function FreezerGrid() {
             key={id}
             freezerId={id}
             reading={readings.get(id)}
+            loading={loading && readings.size === 0}
             now={now}
           />
         ))}

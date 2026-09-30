@@ -11,10 +11,12 @@ import type { LatestReading } from "@/lib/types";
 export function FreezerCard({
   freezerId,
   reading,
+  loading = false,
   now,
 }: {
   freezerId: number;
   reading: LatestReading | undefined;
+  loading?: boolean;
   now: number;
 }) {
   const status: NodeStatus = nodeStatus(reading?.received_at, now, freezerId);
@@ -29,10 +31,16 @@ export function FreezerCard({
         <span className="text-sm font-semibold text-ink-secondary">
           Freezer {freezerId}
         </span>
-        <StatusBadge status={status} />
+        {loading ? (
+          <span className="text-xs font-medium text-ink-muted">Loading…</span>
+        ) : (
+          <StatusBadge status={status} />
+        )}
       </div>
 
-      {hasReading ? (
+      {loading ? (
+        <div className="text-sm text-ink-muted">Waiting for first response…</div>
+      ) : hasReading ? (
         <div>
           <div className="text-3xl font-semibold leading-none text-ink">
             {cToF(reading.temp_c).toFixed(1)}
@@ -47,8 +55,13 @@ export function FreezerCard({
       )}
 
       <div className="mt-auto text-xs text-ink-muted tabular">
-        {hasReading ? relativeTime(reading.received_at, now) : "no readings yet"}
+        {loading ? "waiting for data" : hasReading ? relativeTime(reading.received_at, now) : "no readings yet"}
       </div>
+      {reading?.firmware_version && (
+        <span className="inline-flex w-fit rounded border border-hairline px-1.5 py-0.5 text-[10px] text-ink-muted tabular">
+          firmware {reading.firmware_version}
+        </span>
+      )}
     </Link>
   );
 }

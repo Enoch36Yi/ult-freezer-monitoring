@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TempChart } from "./TempChart";
 import { StatusBadge } from "./StatusBadge";
 import {
@@ -43,13 +43,18 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
   const [series, setSeries] = useState<Series>(EMPTY_SERIES);
   const [latest, setLatest] = useState<LatestReading | LatestPrototypeReading | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [tier, setTier] = useSensorTier();
+  const requestId = useRef(0);
+  const previousTier = useRef(tier);
 
   const refresh = useCallback(
     async (activeRange: RangeKey) => {
+      const currentRequest = ++requestId.current;
+      setRefreshing(true);
       try {
         // The header reads the true latest reading, not the last point in the
         // chart window, so "Current" and RSSI stay right even on a range that
@@ -63,6 +68,7 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
           prototype ? fetchPrototypeSeries(activeRange) : fetchSeries(freezerId, activeRange, tier),
         ]);
 
+        if (currentRequest !== requestId.current) return;
         if (latestRes.status === "fulfilled") setLatest(latestRes.value);
         if (seriesRes.status === "fulfilled") setSeries(seriesRes.value);
 
@@ -74,9 +80,12 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
 
         setError(failed ? "Could not load readings right now. Try again later." : null);
       } catch {
+        if (currentRequest !== requestId.current) return;
         setError("Could not load readings right now. Try again later.");
       } finally {
+        if (currentRequest !== requestId.current) return;
         setLoading(false);
+        setRefreshing(false);
         setNow(Date.now());
       }
     },
@@ -84,6 +93,12 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
   );
 
   useEffect(() => {
+    if (previousTier.current !== tier) {
+      previousTier.current = tier;
+      setLatest(null);
+      setSeries(EMPTY_SERIES);
+      setError(null);
+    }
     setLoading(true);
     refresh(range);
     const poll = setInterval(() => refresh(range), REFRESH_MS);
@@ -115,7 +130,7 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
     <main className="mx-auto max-w-[1100px] px-5 py-8">
       <Link
         href="/"
-        className="text-sm text-ink-secondary underline-offset-4 hover:underline"
+        className="inline-flex min-h-11 items-center rounded-sm px-1 text-sm text-ink-secondary underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-series"
       >
         ← All freezers
       </Link>
@@ -125,15 +140,23 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
         <div className="flex flex-wrap items-center gap-4">
           {!prototype && <TierSelect tier={tier} onChange={setTier} />}
           <div className="flex items-center gap-3">
-            <StatusBadge status={status} />
+            {loading && !latest ? (
+              <span className="text-xs font-medium text-ink-muted">Loading…</span>
+            ) : (
+              <StatusBadge status={status} />
+            )}
             <span className="text-xs text-ink-muted tabular">
-              last seen {relativeTime(latest?.received_at, now)}
+              {loading && !latest ? "waiting for data" : `last seen ${relativeTime(latest?.received_at, now)}`}
             </span>
           </div>
         </div>
       </header>
       {prototype && <p className="mt-2 text-sm text-ink-secondary">Bench instrument · DS18B20 · excluded from the 21-freezer study</p>}
-      <p className="mt-2 text-xs text-ink-muted">firmware {latest?.firmware_version ?? "unknown"}</p>
+      {latest?.firmware_version && (
+        <p className="mt-2 inline-flex rounded border border-hairline px-1.5 py-0.5 text-xs text-ink-muted tabular">
+          firmware {latest.firmware_version}
+        </p>
+      )}
 
       {error && (
         <div
@@ -141,7 +164,20 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
           className="mt-4 rounded-lg border border-hairline bg-surface p-3 text-sm"
           style={{ color: "var(--status-critical)" }}
         >
-          ■ {error}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex min-w-0 items-start gap-2">
+              <span className="mt-1 shrink-0" aria-hidden="true">■</span>
+              <span>{error}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => void refresh(range)}
+              disabled={refreshing}
+              className="min-h-11 rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:border-series hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-series disabled:cursor-wait disabled:opacity-60"
+            >
+              {refreshing ? "Retrying…" : "Try again"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -181,18 +217,18 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
 
       {/* Filters sit in one row above the chart */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Time range">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Time range">
           {RANGE_KEYS.map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => setRange(key)}
               aria-pressed={range === key}
-              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`min-h-11 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
                 range === key
                   ? "border-series bg-surface text-ink"
-                  : "border-hairline bg-surface text-ink-secondary hover:text-ink"
-              }`}
+                : "border-hairline bg-surface text-ink-secondary hover:text-ink"
+              } focus:outline-none focus-visible:ring-2 focus-visible:ring-series`}
             >
               {RANGES[key].label}
             </button>
@@ -202,7 +238,8 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
         <button
           type="button"
           onClick={() => setShowTable((v) => !v)}
-          className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-medium text-ink-secondary hover:text-ink"
+          className="min-h-11 rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-medium text-ink-secondary hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-series"
+              aria-pressed={showTable}
         >
           {showTable ? "Show chart" : "Show table"}
         </button>

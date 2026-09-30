@@ -15,22 +15,30 @@ const PAGE_CONCURRENCY = 8;
  * A single "recent rows" query would silently drop any node that has been
  * offline longer than the window — exactly the node you most need to see — so
  * each freezer gets its own `limit 1`. Twenty-one indexed lookups on
- * (freezer_id, received_at desc) is cheap, and they run in parallel. Receipt
- * time is the server-side liveness signal; recorded_at remains the sensor's
- * measurement time for charts and provenance.
+ * (freezer_id, received_at desc) is cheap, and they run in parallel. A failed
+ * lookup is returned separately so one transient node/query failure does not
+ * erase the other nodes' values. Receipt time is the server-side liveness
+ * signal; recorded_at remains the sensor's measurement time for charts and
+ * provenance.
  */
 export async function fetchLatestPerFreezer(
   tier: SensorTier,
-): Promise<Map<number, LatestReading>> {
-  const results = await Promise.all(
+): Promise<{ readings: Map<number, LatestReading>; failedIds: number[] }> {
+  const results = await Promise.allSettled(
     FREEZER_IDS.map((id) => fetchLatest(id, tier)),
   );
 
   const byId = new Map<number, LatestReading>();
-  for (const row of results) {
-    if (row) byId.set(row.freezer_id, row);
-  }
-  return byId;
+  const failedIds: number[] = [];
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      const row = result.value;
+      if (row) byId.set(row.freezer_id, row);
+    } else {
+      failedIds.push(FREEZER_IDS[index]);
+    }
+  });
+  return { readings: byId, failedIds };
 }
 
 /** Most recent reading for one freezer, independent of any chart range. */
