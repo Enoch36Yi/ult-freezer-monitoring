@@ -29,15 +29,40 @@ To retain an audit, supply a new filename:
 
 The script reads the local dashboard API configuration without printing the key,
 checks that the dashboard uses the expected project, validates required reading
-columns, checks the latest ESP32 observation for every freezer, and calls the
-tier-specific history function separately for ESP32, iMonnit, and TRAXX. It
-performs only GET requests. It refuses to overwrite an existing report.
+columns including `firmware_version`, checks the latest ESP32 observation for
+every freezer and Prototype 22, and calls the fleet and Prototype 22 history
+functions. It performs only GET requests. It refuses to overwrite an existing
+report.
 Exit code 1 means an API/configuration contract failed. Fleet status is reported
 separately: successful API checks do not mean hardware commissioning has passed.
 The snapshot timestamp and limitations are included in the JSON output.
 
 This is an on-demand verification script, not a scheduled monitor or backup.
 The retained snapshot contains latest records, not a complete raw-data export.
+
+## Prototype 22 operations
+
+Prototype 22 is a bench instrument, not Freezer 22 and not part of the
+21-freezer study. Its rows live in `prototype_readings`, its history function is
+`prototype_readings_bucketed`, and its device identity is `prototype-22`.
+
+On a fresh project, run [prototype22.sql](prototype22.sql) after
+[schema.sql](schema.sql). On an existing project, create the prototype table
+before applying migrations 003–008; migrations 003–006 update its permissions,
+identity columns, clock provenance, and bounded history function, while 007–008
+add the liveness index and firmware metadata.
+
+The verifier reports `no_data` for Prototype 22 when the table is empty. That
+is an expected pre-bench state, not a pass for hardware commissioning. A valid
+bench observation must contain `prototype_id=22`, `device_id=prototype-22`,
+`firmware_version`, `observation_id`, `clock_valid=true`, a real
+`recorded_at`, and the server-generated `received_at`. Never insert a made-up
+temperature to turn this check green; use the serial-to-database acceptance
+procedure in `docs/PROTOTYPE_22_ACCEPTANCE.md`.
+
+Keep Prototype 22 credentials, bench Wi-Fi details, serial logs, and image
+hashes in the private bench record. Do not place them in this repository or in
+the public verification report.
 
 ## Audit on 2026-09-22
 
@@ -108,7 +133,8 @@ methodology if its element is not a DS18B20.
    area. Never use made-up study rows as production connectivity tests. Public
    read access does not prove insert permissions or device delivery.
 4. Define instrument identity, commissioning state, actual sensor coverage, bench
-   versus study status, calibration reference, and placement history. Separate
+   versus study status, calibration reference, and placement history. Prototype
+   22's separate table and verifier path are documented above; separate
    device-health messages from valid temperature observations so a missing probe
    can be reported without inventing a temperature.
 5. The device now sends a boot/sample observation ID, a clock-valid flag, and a
