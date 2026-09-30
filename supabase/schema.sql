@@ -5,6 +5,7 @@ create table public.readings (
   id bigint generated always as identity primary key,
   freezer_id smallint not null check (freezer_id between 1 and 21),
   device_id text not null,
+  firmware_version text,
   observation_id text not null,
   sensor_tier text not null default 'esp32_ds18b20',
   temp_c numeric not null,

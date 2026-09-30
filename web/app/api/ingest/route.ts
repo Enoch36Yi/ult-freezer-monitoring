@@ -11,6 +11,7 @@ type Reading = {
   freezer_id?: number;
   prototype_id?: number;
   device_id?: string;
+  firmware_version?: string;
   observation_id?: string;
   clock_valid?: boolean;
   sensor_tier?: string;
@@ -77,7 +78,8 @@ async function readBodyLimited(request: Request): Promise<string | null> {
 function validReading(reading: Reading, deviceId: string) {
   const allowed = new Set([
     "freezer_id", "prototype_id", "sensor_tier", "temp_c", "rssi",
-    "reset_reason", "recorded_at", "device_id", "observation_id", "clock_valid",
+    "reset_reason", "recorded_at", "device_id", "firmware_version",
+    "observation_id", "clock_valid",
   ]);
   if (Object.keys(reading).some((key) => !allowed.has(key))) return false;
   if (reading.sensor_tier !== SENSOR_TIER ||
@@ -87,6 +89,9 @@ function validReading(reading: Reading, deviceId: string) {
       (!Number.isInteger(reading.rssi) || reading.rssi < -150 || reading.rssi > 0)) return false;
   if (reading.reset_reason !== undefined &&
       (typeof reading.reset_reason !== "string" || reading.reset_reason.length > 32)) return false;
+  if (reading.firmware_version !== undefined &&
+      (typeof reading.firmware_version !== "string" ||
+       !/^[0-9A-Za-z._+-]{1,32}$/.test(reading.firmware_version))) return false;
   if (reading.recorded_at !== undefined &&
       (typeof reading.recorded_at !== "string" || Number.isNaN(Date.parse(reading.recorded_at)))) return false;
   if (reading.clock_valid !== undefined && reading.clock_valid !== true) return false;

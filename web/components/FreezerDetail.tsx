@@ -133,6 +133,7 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
         </div>
       </header>
       {prototype && <p className="mt-2 text-sm text-ink-secondary">Bench instrument · DS18B20 · excluded from the 21-freezer study</p>}
+      <p className="mt-2 text-xs text-ink-muted">firmware {latest?.firmware_version ?? "unknown"}</p>
 
       {error && (
         <div

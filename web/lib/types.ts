@@ -2,6 +2,7 @@
 export type Reading = {
   id: number;
   freezer_id: number;
+  firmware_version: string | null;
   sensor_tier: string;
   temp_c: number;
   rssi: number | null;
@@ -13,7 +14,7 @@ export type Reading = {
 /** The columns the dashboard actually selects. */
 export type LatestReading = Pick<
   Reading,
-  "freezer_id" | "temp_c" | "rssi" | "reset_reason" | "recorded_at" | "received_at"
+  "freezer_id" | "firmware_version" | "temp_c" | "rssi" | "reset_reason" | "recorded_at" | "received_at"
 >;
 
 export type LatestPrototypeReading = Omit<LatestReading, "freezer_id"> & {

@@ -864,6 +864,7 @@ static String buildReading(float tempC) {
   doc["freezer_id"] = g_freezerId;
 #endif
   doc["device_id"] = deviceId();
+  doc["firmware_version"] = FIRMWARE_VERSION;
   doc["observation_id"] = observationId(g_sampleSequence);
   doc["sensor_tier"] = SENSOR_TIER;
   // Fixed 3 decimals, well inside the DS18B20's 0.0625 C step, and avoids

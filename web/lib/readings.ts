@@ -40,7 +40,7 @@ export async function fetchLatest(
 ): Promise<LatestReading | null> {
   const { data, error } = await supabase
     .from("readings")
-    .select("freezer_id,temp_c,rssi,reset_reason,recorded_at,received_at")
+    .select("freezer_id,firmware_version,temp_c,rssi,reset_reason,recorded_at,received_at")
     .eq("freezer_id", freezerId)
     .eq("sensor_tier", tier)
     .order("received_at", { ascending: false })
@@ -56,7 +56,7 @@ export async function fetchLatest(
 export async function fetchPrototypeLatest(): Promise<LatestPrototypeReading | null> {
   const { data, error } = await supabase
     .from("prototype_readings")
-    .select("prototype_id,temp_c,rssi,reset_reason,recorded_at,received_at")
+    .select("prototype_id,firmware_version,temp_c,rssi,reset_reason,recorded_at,received_at")
     .eq("prototype_id", PROTOTYPE_ID)
     .eq("sensor_tier", "esp32_ds18b20")
     .order("received_at", { ascending: false })
