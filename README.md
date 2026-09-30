@@ -106,23 +106,29 @@ project's migration workflow.
 Here is the table portion, verbatim from schema.sql:
 
 ```sql
-create table readings (
+create table public.readings (
   id bigint generated always as identity primary key,
   freezer_id smallint not null check (freezer_id between 1 and 21),
+  device_id text not null,
+  firmware_version text,
+  observation_id text not null,
   sensor_tier text not null default 'esp32_ds18b20',
   temp_c numeric not null,
   rssi integer,
   reset_reason text,
   recorded_at timestamptz not null default now(),
+  clock_valid boolean not null default true,
   received_at timestamptz not null default now()
 );
 
-create index on readings (freezer_id, recorded_at desc);
+create index on public.readings (freezer_id, recorded_at desc);
+create unique index readings_device_observation_uidx
+  on public.readings (device_id, observation_id);
 
-alter table readings enable row level security;
+alter table public.readings enable row level security;
 
 create policy "anon can read readings"
-  on readings for select
+  on public.readings for select
   to anon
   using (true);
 ```
@@ -185,6 +191,8 @@ Notes on the columns:
   that provenance; **`received_at`** is the database clock. Devices pause
   measurement uploads until NTP succeeds, so buffering preserves measurement
   time instead of replacing it with receipt time.
+- **`firmware_version`** identifies the image that produced a row. It is
+  nullable so historical rows and older queued observations remain valid.
 - **`reset_reason`** is set only on the first reading after a boot, so a node
   that is brownout-looping shows up in the data instead of silently vanishing.
 
@@ -265,7 +273,7 @@ need one authorized USB baseline flash to install that bootloader behavior.
 
 - **By freezer ID:** IDs 1–6 read and post every **1 minute**; IDs 7–21
   read and post every **15 minutes**. Each reading contains
-  `{freezer_id, device_id, observation_id, temp_c, rssi, sensor_tier, recorded_at}` and is POSTed to the
+  `{freezer_id, device_id, firmware_version, observation_id, temp_c, rssi, sensor_tier, recorded_at, clock_valid}` and is POSTed to the
   authenticated `/api/ingest` route with a per-device HMAC signature.
 - **On send failure** — no WiFi, request error, timeout — the reading is
   appended to `/queue.jsonl` on LittleFS instead of being dropped.

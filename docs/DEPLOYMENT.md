@@ -163,7 +163,8 @@ anonymous writes. Then, one node at a time:
 5. Add the same `freezer-NN` → secret mapping to Vercel if it is not already
    present.
 6. Confirm NTP synchronization, `[reading] posted`, and a real row with
-   `device_id`, `observation_id`, `clock_valid=true`, and `recorded_at`.
+   `device_id`, `firmware_version`, `observation_id`, `clock_valid=true`, and
+   `recorded_at`.
 7. Label the enclosure and record the firmware hash, board identity, probe
    identity, and freezer mapping.
 
