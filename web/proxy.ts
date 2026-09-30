@@ -1,7 +1,24 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const SUPABASE_ORIGIN = "https://dfxxamgnrimwoumknuxa.supabase.co";
+const DEFAULT_SUPABASE_ORIGIN = "https://dfxxamgnrimwoumknuxa.supabase.co";
+
+function configuredSupabaseOrigin() {
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!configuredUrl) return DEFAULT_SUPABASE_ORIGIN;
+
+  try {
+    const origin = new URL(configuredUrl);
+    if (origin.protocol !== "https:" && origin.protocol !== "http:") {
+      return DEFAULT_SUPABASE_ORIGIN;
+    }
+    return origin.origin;
+  } catch {
+    return DEFAULT_SUPABASE_ORIGIN;
+  }
+}
+
+const SUPABASE_ORIGIN = configuredSupabaseOrigin();
 
 export function proxy(request: NextRequest) {
   // Next uses the request nonce when rendering its own scripts. A fresh nonce
