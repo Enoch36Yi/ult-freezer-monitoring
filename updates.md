@@ -1,5 +1,18 @@
 # ULT freezer project — cross-machine handoff
 
+## 2026-09-29 CI repair — pushed, firmware build reproduced locally
+
+- Reproduced the fleet CI compiler failures in a temporary PlatformIO 6.2.0
+  environment: the queue recovery `constexpr` used a C++14-style body, and
+  the fleet build referenced `OTA_PASSWORD_HASH` even when the intentionally
+  ignored `device_security.h` was absent.
+- Pushed each fix separately: `f10e07e` keeps the queue policy C++11
+  compatible; `1fa63e3` compiles the unauthenticated-by-default fleet image
+  while leaving OTA disabled until the local security header is configured.
+- Verification after both fixes: all 10 native PlatformIO test cases passed and
+  the `esp32-s3` fleet image built successfully. The build still reports the
+  upstream OneWire `#undef` warnings, but no errors. No firmware was flashed.
+
 ## 2026-09-29 repository sweep follow-up — pushed, no external state changed
 
 - Pushed the remaining repo-only hardening as separate commits on `main`:

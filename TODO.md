@@ -103,6 +103,8 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
       snapshot tool, not a backup (`docs/RAW_EXPORT_RUNBOOK.md`, 2026-09-29)
 - [x] Harden dashboard loading, partial-refresh, outage, retry, tier-switch,
       focus, contrast, and touch-target states (`08af91c`, 2026-09-29)
+- [x] Repair the fleet CI compiler failures for the queue policy and optional
+      OTA security header (`f10e07e`, `1fa63e3`, 2026-09-29)
 - [ ] Consider excluding `firmware/.pio` and `web/node_modules` from OneDrive sync
       (about 38k files, and the source of the 2026-09-26 deletion prompt); do not
       delete them without checking sync state
