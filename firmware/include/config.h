@@ -29,6 +29,7 @@
 // ---------------------------------------------------------------------------
 // Sampling / reporting
 // ---------------------------------------------------------------------------
+#define FIRMWARE_VERSION "0.2.0"
 #define SENSOR_TIER "esp32_ds18b20"
 
 #define FREEZER_ID_MIN 1
@@ -79,3 +80,9 @@
 #define NTP_SERVER_2 "time.nist.gov"
 // Store UTC. The dashboard renders local time.
 #define TZ_SPEC "UTC0"
+
+// A newly uploaded OTA slot must stay alive through this window before the
+// bootloader considers it the last-known-good image. This catches boot loops,
+// panics, watchdog resets, and power loss without making a node wait for NTP
+// or the ingestion service to be available.
+#define OTA_HEALTH_WINDOW_MS 30000UL

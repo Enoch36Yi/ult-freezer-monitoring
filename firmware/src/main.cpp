@@ -19,6 +19,7 @@
 #include <WiFiClientSecure.h>
 #include <WiFiManager.h>
 #include <mbedtls/md.h>
+#include <esp_ota_ops.h>
 #include <esp_system.h>
 #include <time.h>
 
@@ -66,6 +67,10 @@ static bool g_ntpEverSynced = false;
 static String g_pendingResetReason;
 static QueuePresence g_queuePresence;
 static bool g_filesystemReady = false;
+static bool g_otaValidationPending = false;
+static uint32_t g_otaValidationStartedAt = 0;
+static bool g_otaInProgress = false;
+static uint8_t g_otaLastProgress = 255;
 
 // --- Small helpers ---------------------------------------------------------
 
@@ -127,6 +132,42 @@ static String deviceId() {
   snprintf(id, sizeof(id), "freezer-%02d", g_freezerId);
   return String(id);
 #endif
+}
+
+// With bootloader rollback enabled, the active OTA slot starts in
+// ESP_OTA_IMG_PENDING_VERIFY. Leave it pending until the main loop has been
+// alive long enough to mount LittleFS and reach normal service. A reset before
+// confirmation makes the bootloader select the previous valid slot.
+static void initOtaValidation() {
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  if (running == nullptr) return;
+
+  esp_ota_img_states_t state;
+  if (esp_ota_get_state_partition(running, &state) != ESP_OK) return;
+  if (state != ESP_OTA_IMG_PENDING_VERIFY) return;
+
+  g_otaValidationPending = true;
+  g_otaValidationStartedAt = millis();
+  Serial.printf("[ota] firmware %s pending health validation for %lu seconds\n",
+                FIRMWARE_VERSION,
+                static_cast<unsigned long>(OTA_HEALTH_WINDOW_MS / 1000UL));
+}
+
+static void serviceOtaValidation() {
+  if (!g_otaValidationPending || !g_filesystemReady || g_otaInProgress) return;
+  if (millis() - g_otaValidationStartedAt < OTA_HEALTH_WINDOW_MS) return;
+
+  const esp_err_t result = esp_ota_mark_app_valid_cancel_rollback();
+  if (result == ESP_OK) {
+    g_otaValidationPending = false;
+    Serial.printf("[ota] firmware %s passed health validation; rollback cancelled\n",
+                  FIRMWARE_VERSION);
+  } else {
+    // Keep retrying rather than accepting an image when the bootloader could
+    // not record the confirmation. A later reset should still recover it.
+    Serial.printf("[ota] health validation could not be recorded: %s\n",
+                  esp_err_to_name(result));
+  }
 }
 
 static bool initObservationIdentity() {
@@ -883,9 +924,26 @@ static bool initOta() {  // NOLINT — forward-declared above
   }
   ArduinoOTA.setHostname(otaHostname().c_str());
   ArduinoOTA.setPasswordHash(OTA_PASSWORD_HASH);
-  ArduinoOTA.onStart([]() { Serial.println("[ota] update starting"); });
-  ArduinoOTA.onEnd([]() { Serial.println("[ota] update complete"); });
+  ArduinoOTA.onStart([]() {
+    g_otaInProgress = true;
+    g_otaLastProgress = 255;
+    Serial.printf("[ota] update starting; replacing the inactive slot with firmware %s\n",
+                  FIRMWARE_VERSION);
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    const uint8_t percent = total == 0
+                                ? 0
+                                : static_cast<uint8_t>((progress * 100U) / total);
+    if (percent == g_otaLastProgress || (percent % 10U) != 0U) return;
+    g_otaLastProgress = percent;
+    Serial.printf("[ota] progress %u%%\n", percent);
+  });
+  ArduinoOTA.onEnd([]() {
+    g_otaInProgress = false;
+    Serial.println("[ota] update complete; rebooting into the new slot");
+  });
   ArduinoOTA.onError([](ota_error_t error) {
+    g_otaInProgress = false;
     Serial.printf("[ota] error %u\n", error);
   });
   ArduinoOTA.begin();
@@ -901,8 +959,10 @@ void setup() {
 
   const esp_reset_reason_t reason = esp_reset_reason();
   g_pendingResetReason = resetReasonName(reason);
-  Serial.printf("\n[boot] ULT freezer node, reset reason: %s\n",
-                g_pendingResetReason.c_str());
+  Serial.printf("\n[boot] ULT freezer node, firmware %s, reset reason: %s\n",
+                FIRMWARE_VERSION, g_pendingResetReason.c_str());
+
+  initOtaValidation();
 
   mountFilesystem();
   g_observationIdentityReady = initObservationIdentity();
@@ -939,6 +999,7 @@ void setup() {
 
 void loop() {
   ArduinoOTA.handle();
+  serviceOtaValidation();
   serviceWifi();
   serviceNtp();
   serviceQueue();

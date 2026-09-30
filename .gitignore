@@ -5,6 +5,8 @@ web/.env.local
 firmware/include/prototype22_wifi.h
 firmware/include/device_security.h
 firmware/.pio/
+firmware/sdkconfig.*
+!firmware/sdkconfig.defaults
 .claude/
 __pycache__/
 .next/
