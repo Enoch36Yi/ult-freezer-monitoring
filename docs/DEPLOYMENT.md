@@ -171,6 +171,9 @@ anonymous writes. Then, one node at a time:
 7. Label the enclosure and record the firmware hash, board identity, probe
    identity, and freezer mapping.
 
+Record those facts in the private [device registry](DEVICE_REGISTRY.md),
+including an independent second checker before marking the row `active`.
+
 If the sensor is absent or NTP is invalid, the node must not create a
 temperature observation. It may retain valid queued rows and retry later.
 

@@ -318,6 +318,9 @@ The public dashboard variables and server-only ingestion variables are the
 external configuration. There is no login wall in v1:
 the dashboard is open to anyone with the link.
 
+Physical node identity and commissioning evidence belong in the private
+[device registry](docs/DEVICE_REGISTRY.md), not in the dashboard or source tree.
+
 **`/`** — a grid of 21 cards. Each shows the latest reading in both °F and °C,
 a last-seen timestamp, and a status of Live / Stale / Offline / No data (glyph
 plus label, so state never depends on color alone). The grid refetches every
