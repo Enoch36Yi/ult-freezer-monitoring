@@ -17,7 +17,7 @@ export function FreezerCard({
   reading: LatestReading | undefined;
   now: number;
 }) {
-  const status: NodeStatus = nodeStatus(reading?.recorded_at, now, freezerId);
+  const status: NodeStatus = nodeStatus(reading?.received_at, now, freezerId);
   const hasReading = reading !== undefined;
 
   return (
@@ -47,7 +47,7 @@ export function FreezerCard({
       )}
 
       <div className="mt-auto text-xs text-ink-muted tabular">
-        {hasReading ? relativeTime(reading.recorded_at, now) : "no readings yet"}
+        {hasReading ? relativeTime(reading.received_at, now) : "no readings yet"}
       </div>
     </Link>
   );

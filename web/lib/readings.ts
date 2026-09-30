@@ -15,7 +15,9 @@ const PAGE_CONCURRENCY = 8;
  * A single "recent rows" query would silently drop any node that has been
  * offline longer than the window — exactly the node you most need to see — so
  * each freezer gets its own `limit 1`. Twenty-one indexed lookups on
- * (freezer_id, recorded_at desc) is cheap, and they run in parallel.
+ * (freezer_id, received_at desc) is cheap, and they run in parallel. Receipt
+ * time is the server-side liveness signal; recorded_at remains the sensor's
+ * measurement time for charts and provenance.
  */
 export async function fetchLatestPerFreezer(
   tier: SensorTier,
@@ -38,10 +40,10 @@ export async function fetchLatest(
 ): Promise<LatestReading | null> {
   const { data, error } = await supabase
     .from("readings")
-    .select("freezer_id,temp_c,rssi,reset_reason,recorded_at")
+    .select("freezer_id,temp_c,rssi,reset_reason,recorded_at,received_at")
     .eq("freezer_id", freezerId)
     .eq("sensor_tier", tier)
-    .order("recorded_at", { ascending: false })
+    .order("received_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -54,10 +56,10 @@ export async function fetchLatest(
 export async function fetchPrototypeLatest(): Promise<LatestPrototypeReading | null> {
   const { data, error } = await supabase
     .from("prototype_readings")
-    .select("prototype_id,temp_c,rssi,reset_reason,recorded_at")
+    .select("prototype_id,temp_c,rssi,reset_reason,recorded_at,received_at")
     .eq("prototype_id", PROTOTYPE_ID)
     .eq("sensor_tier", "esp32_ds18b20")
-    .order("recorded_at", { ascending: false })
+    .order("received_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;

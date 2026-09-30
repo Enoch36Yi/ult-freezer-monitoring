@@ -47,7 +47,7 @@ export function FreezerGrid() {
 
   const counts = FREEZER_IDS.reduce(
     (acc, id) => {
-      const status = nodeStatus(readings.get(id)?.recorded_at, now, id);
+      const status = nodeStatus(readings.get(id)?.received_at, now, id);
       acc[status === "live" ? "live" : "attention"] += 1;
       return acc;
     },

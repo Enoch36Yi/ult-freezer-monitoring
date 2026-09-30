@@ -32,7 +32,7 @@ export function PrototypeCard() {
     return () => { clearInterval(poll); clearInterval(tick); };
   }, [refresh]);
 
-  const status = nodeStatusAtInterval(reading?.recorded_at, now, target.intervalMs);
+  const status = nodeStatusAtInterval(reading?.received_at, now, target.intervalMs);
   return (
     <section className="mt-8 border-t border-hairline pt-6" aria-label="Prototype">
       <h2 className="mb-1 text-lg font-semibold text-ink">Prototype 22</h2>
@@ -52,7 +52,7 @@ export function PrototypeCard() {
           </div>
         ) : <div className="text-3xl font-semibold leading-none text-ink-muted">—</div>}
         <div className="mt-auto text-xs text-ink-muted tabular">
-          {reading ? relativeTime(reading.recorded_at, now) : "no readings yet"}
+          {reading ? relativeTime(reading.received_at, now) : "no readings yet"}
         </div>
       </Link>
     </section>

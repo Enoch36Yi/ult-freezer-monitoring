@@ -97,8 +97,8 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
   const plotted = useMemo(() => forRender(series), [series]);
   const stats = useMemo(() => seriesStats(series.points), [series]);
   const status = prototype
-    ? nodeStatusAtInterval(latest?.recorded_at, now, storageForTarget({ kind: "prototype", id: PROTOTYPE_ID }).intervalMs)
-    : nodeStatus(latest?.recorded_at, now, freezerId);
+    ? nodeStatusAtInterval(latest?.received_at, now, storageForTarget({ kind: "prototype", id: PROTOTYPE_ID }).intervalMs)
+    : nodeStatus(latest?.received_at, now, freezerId);
 
   const bucketNote = series.bucketSeconds
     ? `${bucketLabel(series.bucketSeconds)} bucket`
@@ -127,7 +127,7 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
           <div className="flex items-center gap-3">
             <StatusBadge status={status} />
             <span className="text-xs text-ink-muted tabular">
-              last seen {relativeTime(latest?.recorded_at, now)}
+              last seen {relativeTime(latest?.received_at, now)}
             </span>
           </div>
         </div>

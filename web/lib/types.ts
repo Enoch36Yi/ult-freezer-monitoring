@@ -13,7 +13,7 @@ export type Reading = {
 /** The columns the dashboard actually selects. */
 export type LatestReading = Pick<
   Reading,
-  "freezer_id" | "temp_c" | "rssi" | "reset_reason" | "recorded_at"
+  "freezer_id" | "temp_c" | "rssi" | "reset_reason" | "recorded_at" | "received_at"
 >;
 
 export type LatestPrototypeReading = Omit<LatestReading, "freezer_id"> & {

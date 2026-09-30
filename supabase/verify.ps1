@@ -50,12 +50,15 @@ $headers.Remove('Prefer')
 for ($id = 1; $id -le 21; $id++) {
     $interval = if ($id -le 6) { 60 } else { 900 }
     try {
-        $response = Read-Api ('/rest/v1/readings?select=id,temp_c,recorded_at,received_at&freezer_id=eq.' + $id + '&sensor_tier=eq.esp32_ds18b20&order=recorded_at.desc&limit=1')
+        $response = Read-Api ('/rest/v1/readings?select=id,temp_c,recorded_at,received_at&freezer_id=eq.' + $id + '&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1')
         $rows = @(ConvertFrom-JsonArray $response.Content)
         $latest = if ($rows.Count -gt 0) { $rows[0] } else { $null }
         $state = 'no_data'
         if ($null -ne $latest) {
-            $age = ($now - [DateTimeOffset]::Parse($latest.recorded_at)).TotalSeconds
+            # received_at is the server clock and answers "did this node
+            # reach the ingestion service recently?" recorded_at remains the
+            # measurement timestamp and can legitimately lag after queue replay.
+            $age = ($now - [DateTimeOffset]::Parse($latest.received_at)).TotalSeconds
             $state = if ($age -lt -60) { 'future_timestamp' } elseif ($age -le 3 * $interval) { 'recent' } elseif ($age -le 12 * $interval) { 'stale' } else { 'offline' }
         }
         $fleet.Add([pscustomobject]@{ freezer_id = $id; interval_seconds = $interval; state = $state; latest = $latest })
