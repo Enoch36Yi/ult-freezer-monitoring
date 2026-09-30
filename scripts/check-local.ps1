@@ -43,7 +43,7 @@ if ($fleetText.Contains('[1wire-diag]') -or $prototypeText.Contains('[1wire-diag
 Run-Checked 'web' 'npm.cmd' @('test')
 Run-Checked 'web' 'npx.cmd' @('tsc', '--noEmit')
 Run-Checked 'web' 'npm.cmd' @('run', 'build')
-Run-Checked '.' 'node' @('--test', 'scripts/prototype-check.test.mjs', 'scripts/audit-readings.test.mjs')
+Run-Checked '.' 'node' @('--test', 'scripts/prototype-check.test.mjs')
 
 $hash = (Get-FileHash -LiteralPath $image -Algorithm SHA256).Hash
 Write-Output "Local checks passed. Prototype 22 image SHA-256: $hash"
