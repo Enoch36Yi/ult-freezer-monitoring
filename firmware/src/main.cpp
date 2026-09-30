@@ -24,7 +24,9 @@
 #include <time.h>
 
 #include "config.h"
+#include "ota_health.h"
 #include "queue_presence.h"
+#include "queue_recovery.h"
 #include "sampling_policy.h"
 #include "supabase_root_ca.h"
 #if __has_include("device_security.h")
@@ -155,9 +157,10 @@ static void initOtaValidation() {
 }
 
 static void serviceOtaValidation() {
-  if (!g_otaValidationPending || !g_filesystemReady ||
-      !g_observationIdentityReady || !g_otaStarted || !g_wifiWasConnected ||
-      g_otaInProgress) return;
+  if (!ota_health::canConfirm(
+          g_otaValidationPending, g_filesystemReady,
+          g_observationIdentityReady, g_otaStarted, g_wifiWasConnected,
+          g_otaInProgress)) return;
   if (millis() - g_otaValidationStartedAt < OTA_HEALTH_WINDOW_MS) return;
 
   const esp_err_t result = esp_ota_mark_app_valid_cancel_rollback();
@@ -482,21 +485,26 @@ static void syncNtp(bool blocking) {
 static bool recoverQueueTemp() {
   if (!g_filesystemReady) return false;
   const bool hasQueue = LittleFS.exists(QUEUE_PATH);
-  if (!LittleFS.exists(QUEUE_TMP_PATH)) return true;
-  if (hasQueue) {
-    if (!LittleFS.remove(QUEUE_TMP_PATH)) {
-      Serial.println("[queue] could not discard stale temp file; preserving queue");
-      return false;
-    }
-    Serial.println("[queue] discarded partial temp file from interrupted write");
-    return true;
+  const bool hasTemp = LittleFS.exists(QUEUE_TMP_PATH);
+  switch (queueTempAction(hasQueue, hasTemp)) {
+    case QueueTempAction::kNone:
+      return true;
+    case QueueTempAction::kDiscardTemp:
+      if (!LittleFS.remove(QUEUE_TMP_PATH)) {
+        Serial.println("[queue] could not discard stale temp file; preserving queue");
+        return false;
+      }
+      Serial.println("[queue] discarded partial temp file from interrupted write");
+      return true;
+    case QueueTempAction::kAdoptTemp:
+      if (!LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
+        Serial.println("[queue] could not recover temp queue file");
+        return false;
+      }
+      Serial.println("[queue] recovered queue from temp file after interrupted write");
+      return true;
   }
-  if (!LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
-    Serial.println("[queue] could not recover temp queue file");
-    return false;
-  }
-  Serial.println("[queue] recovered queue from temp file after interrupted write");
-  return true;
+  return false;
 }
 
 // An append can lose power after writing the JSON bytes but before writing the
@@ -519,7 +527,7 @@ static bool repairQueueTail() {
   }
   const int lastByte = probe.read();
   probe.close();
-  if (lastByte == '\n') return true;
+  if (queueFinalByteCompletesLine(lastByte)) return true;
 
   File in = LittleFS.open(QUEUE_PATH, FILE_READ);
   File out = LittleFS.open(QUEUE_TMP_PATH, FILE_WRITE);
@@ -953,7 +961,8 @@ static void serviceWifi() {
 
   if (!connected) {
     if (g_wifiWasConnected) {
-      if (g_otaStarted && !g_otaInProgress) {
+      if (ota_health::linkLost(g_wifiWasConnected, connected, g_otaStarted,
+                               g_otaInProgress)) {
         // ArduinoOTA owns a UDP socket and the mDNS advertisement. Rebind both
         // after a link loss so a DHCP address change does not strand OTA.
         ArduinoOTA.end();
