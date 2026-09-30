@@ -22,6 +22,8 @@ comment on table public.prototype_readings is
 
 create index prototype_readings_tier_time_idx
   on public.prototype_readings (prototype_id, sensor_tier, recorded_at desc);
+create index prototype_readings_tier_received_idx
+  on public.prototype_readings (prototype_id, sensor_tier, received_at desc);
 create unique index prototype_device_observation_uidx
   on public.prototype_readings (device_id, observation_id);
 

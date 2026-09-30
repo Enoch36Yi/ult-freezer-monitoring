@@ -47,6 +47,7 @@ supabase/migrations/003_authenticated_ingest.sql
 supabase/migrations/004_replay_safe_observations.sql
 supabase/migrations/005_clock_provenance.sql
 supabase/migrations/006_bound_history_rpc.sql
+supabase/migrations/007_latest_received_index.sql
 ```
 
 If Prototype 22 has not been created yet, run `supabase/prototype22.sql` first.

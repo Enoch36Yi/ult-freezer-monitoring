@@ -80,6 +80,7 @@ supabase/migrations/003_authenticated_ingest.sql authenticated device writes
 supabase/migrations/004_replay_safe_observations.sql deduplication
 supabase/migrations/005_clock_provenance.sql    timestamp provenance
 supabase/migrations/006_bound_history_rpc.sql   bounded history RPC
+supabase/migrations/007_latest_received_index.sql liveness query index
 ```
 
 > **002 is not optional.** Three instruments (ESP32/DS18B20, TRAXX, iMonnit)

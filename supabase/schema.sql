@@ -94,3 +94,6 @@ grant execute on function public.readings_bucketed(smallint, timestamptz, timest
 -- every query once more than one instrument reports into this table.
 create index if not exists readings_freezer_tier_time_idx
   on public.readings (freezer_id, sensor_tier, recorded_at desc);
+
+create index if not exists readings_freezer_tier_received_idx
+  on public.readings (freezer_id, sensor_tier, received_at desc);
