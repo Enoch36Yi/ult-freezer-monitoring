@@ -24,6 +24,8 @@ Prototype 22's isolated firmware, database, and verification procedure are in
 before its dashboard card can fetch from Supabase; this is independent of the
 21-freezer `readings` table.
 
+Deployment instructions are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 **The dashboard uses a publishable key plus row-level security for public reads.**
 Devices use per-device HMAC credentials through the authenticated ingestion route;
 the publishable browser key cannot insert observations. There are no MQTT broker
@@ -298,7 +300,8 @@ locally. The example also documents the server-only ingestion variables.
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase service credential; never browser-side |
 | `INGEST_DEVICE_SECRETS_JSON` | Server-only device-ID → HMAC-secret map |
 
-These two are the only external configuration. There is no login wall in v1:
+The public dashboard variables and server-only ingestion variables are the
+external configuration. There is no login wall in v1:
 the dashboard is open to anyone with the link.
 
 **`/`** — a grid of 21 cards. Each shows the latest reading in both °F and °C,

@@ -11,22 +11,22 @@ IDs 1–6 at 1 minute and IDs 7–21 at 15 minutes.
 
 ## Software and deployment
 
-1. Build the prototype with `python -m platformio run -e prototype-22` from
-   `firmware/`. The fleet image uses `-e esp32-s3`. The prototype build fixes
-   identity 22 at compile time, sends to `/rest/v1/prototype_readings`, and
-   buffers in separate LittleFS paths. It does not read or overwrite the
-   Freezer 1 NVS identity or its saved Wi-Fi network.
+1. Build the prototype with `python -m platformio run -e prototype-22` from a
+   staged firmware copy outside OneDrive. The fleet image uses `-e esp32-s3`.
+   The prototype build fixes identity 22 at compile time, sends an HMAC-signed
+   payload to `/api/ingest`, and buffers in separate LittleFS paths. It does
+   not read or overwrite the Freezer 1 NVS identity or its saved Wi-Fi network.
 2. `firmware/include/prototype22_wifi.h` is the local, Git-ignored source for
    the approved hard-coded network. It is compiled into the prototype image,
    **not** the fleet image. Protect the source, build output, and physical
    device accordingly; rotate the Wi-Fi password if the binary is shared.
    The example header shows the required names without credentials.
-3. `supabase/prototype22.sql` was applied on 2026-09-23 to project
-   `dfxxamgnrimwoumknuxa` using an authenticated administrator. It creates a
-   separate append-only table, DS18B20-only ID22 constraints, anon INSERT and
-   SELECT policies, and a tier-filtered history RPC. It does not change or
-   erase `public.readings`. Do not insert synthetic readings in production as
-   a connectivity test.
+3. `supabase/prototype22.sql` defines a separate append-only table,
+   DS18B20-only ID22 constraints, read-only public access, and a tier-filtered
+   history RPC. The authenticated ingestion route performs device writes;
+   migration 003 removes the historical anon INSERT grant. It does not change
+   or erase `public.readings`. Do not insert synthetic readings in production
+   as a connectivity test.
 4. Run the dashboard from `web/`. Its bottom card reads the prototype table
    independently; `/prototype/22` provides raw and bucketed temperature
    history. Both show **no readings yet** until a real probe reading arrives.
