@@ -38,7 +38,9 @@ separately: successful API checks do not mean hardware commissioning has passed.
 The snapshot timestamp and limitations are included in the JSON output.
 
 This is an on-demand verification script, not a scheduled monitor or backup.
-The retained snapshot contains latest records, not a complete raw-data export.
+For an auditable raw snapshot, use
+[docs/RAW_EXPORT_RUNBOOK.md](../docs/RAW_EXPORT_RUNBOOK.md); its manifest
+contains row counts, UTC bounds, and a SHA-256 of the exported JSONL bytes.
 
 ## Prototype 22 operations
 
