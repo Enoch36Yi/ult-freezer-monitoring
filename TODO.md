@@ -48,6 +48,10 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
       power-loss tests; verify offline retention at both cadences (B06, B07).
       Boot-time recovery of an orphaned queue temp file was added 2026-09-29
       (compiles for all images; not yet observed on a board)
+- [ ] OTA pilot: USB-flash the rollback-enabled bootloader baseline once, then
+      validate a canary OTA, 30-second health confirmation, and recovery from a
+      deliberately failed first boot before any fleet rollout. See
+      `docs/OTA_RUNBOOK.md`.
 - [ ] Install a host C++ compiler (or run on the desktop) so `pio test -e native`
       can run again; Node LTS if the JS tests are to run on this laptop
 - [ ] Final BOM, USB supply, enclosure fit test (CAD in `cad_enclosure/`), probe routing

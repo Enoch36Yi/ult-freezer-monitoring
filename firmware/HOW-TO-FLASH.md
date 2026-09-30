@@ -150,15 +150,21 @@ immediate, so a longer wait indicates a connection or posting problem.
 
 # Updating firmware later, over the air
 
+The complete canary, hash, rollback, and bad-release procedure is in
+[`docs/OTA_RUNBOOK.md`](../docs/OTA_RUNBOOK.md). The short command is:
+
 ```bash
-pio run -e esp32-s3-ota -t upload --upload-port ult-freezer-07.local \
+pio run -e esp32-s3-ota -t upload --upload-port <exact-node-host-or-ip> \
   --upload-password "$OTA_PASSWORD"
 ```
 
 OTA stays disabled until the ignored `include/device_security.h` supplies a
 64-character SHA-256 `OTA_PASSWORD_HASH`. Keep the matching cleartext password
 in a password manager or shell secret; never put either value in Git.
-Freezer number and WiFi credentials survive an OTA update.
+Freezer number, WiFi credentials, NVS, and the LittleFS queue survive an OTA
+update. Never rely on a default target: identify the labeled node first. A
+node that was USB-flashed with the rollback-enabled firmware can automatically
+return to its last-known-good app if the new one fails during its first boot.
 
 ---
 

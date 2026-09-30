@@ -177,7 +177,10 @@ reading in `prototype_readings`; never insert a test row.
 
 ## 8. OTA updates
 
-Use OTA only after one authenticated reading has been verified over USB:
+Read [OTA_RUNBOOK.md](OTA_RUNBOOK.md) before the first release. Existing nodes
+need one authorized USB baseline flash with the rollback-enabled bootloader;
+an app-only OTA cannot replace an already-installed bootloader. After that,
+use a one-node canary and preserve the last-known-good binary and SHA-256:
 
 ```bash
 python -m platformio run -e esp32-s3-ota -t upload \
@@ -185,10 +188,15 @@ python -m platformio run -e esp32-s3-ota -t upload \
   --upload-password "$OTA_PASSWORD"
 ```
 
-OTA is disabled if the local security header is missing or contains a
-placeholder hash. Keep the device secret, OTA password, and server map aligned
-when replacing a node. Rotate a compromised device secret in Vercel and
-re-provision that node; do not re-enable anonymous inserts.
+Always supply the exact target; `platformio.ini` intentionally has no default
+OTA host. The new app is confirmed after a 30-second stable health window. If
+it resets before confirmation, the bootloader should select the previous valid
+slot. If it has already passed validation but is functionally bad, upload the
+preserved last-known-good image explicitly. OTA is disabled if the local
+security header is missing or contains a placeholder hash. Keep the device
+secret, OTA password, and server map aligned when replacing a node. Rotate a
+compromised device secret in Vercel and re-provision that node; do not
+re-enable anonymous inserts.
 
 ## 9. Read-only verification
 
@@ -208,9 +216,9 @@ network or hardware identifiers.
 
 - Roll back the Vercel deployment if the dashboard or ingestion route is bad.
 - Do not roll back the database by restoring anonymous INSERT access.
-- If a firmware release is bad, stop OTA, retain the last known-good image and
-  hash, and use the authenticated OTA password or USB procedure after the
-  direct authorization gate.
+- If a firmware release is bad, stop OTA, retain the last-known-good image and
+  hash, and follow [OTA_RUNBOOK.md](OTA_RUNBOOK.md). A failed first boot should
+  recover automatically only on nodes with the rollback-enabled bootloader.
 - If a service-role key or device secret leaks, rotate it in the deployment
   environment and update affected nodes. Never paste the replacement into a
   commit, issue, log, or chat.

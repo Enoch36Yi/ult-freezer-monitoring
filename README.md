@@ -252,9 +252,12 @@ pio run -e esp32-s3-ota -t upload --upload-port ult-freezer-07.local \
   --upload-password "$OTA_PASSWORD"
 ```
 
-The `esp32-s3-ota` env in [firmware/platformio.ini](firmware/platformio.ini)
-holds the default target; pass `--upload-port` (an IP works too, if mDNS is
-blocked on the network) to hit a specific node.
+The OTA environment has no default target: always pass the exact hostname or
+IP so an update cannot silently hit the wrong freezer. The inactive app slot
+is written first, and a rollback-enabled bootloader returns to the previous
+image if the new firmware resets before its 30-second health check. Read the
+[OTA runbook](docs/OTA_RUNBOOK.md) before the first fleet update; existing nodes
+need one authorized USB baseline flash to install that bootloader behavior.
 
 ### What the firmware does
 
