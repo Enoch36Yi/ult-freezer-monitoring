@@ -1008,7 +1008,9 @@ static bool initOta() {  // NOLINT — forward-declared above
     return false;
   }
   ArduinoOTA.setHostname(otaHostname().c_str());
+#if DEVICE_SECURITY_CONFIGURED
   ArduinoOTA.setPasswordHash(OTA_PASSWORD_HASH);
+#endif
   ArduinoOTA.onStart([]() {
     g_otaInProgress = true;
     g_otaLastProgress = 255;
