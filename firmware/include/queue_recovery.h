@@ -12,8 +12,10 @@ enum class QueueTempAction : uint8_t {
 // A temp file is safe to adopt only when the original queue is absent. When
 // both exist, the original is the last known complete copy and must win.
 constexpr QueueTempAction queueTempAction(bool hasQueue, bool hasTemp) {
-  if (!hasTemp) return QueueTempAction::kNone;
-  return hasQueue ? QueueTempAction::kDiscardTemp : QueueTempAction::kAdoptTemp;
+  return !hasTemp
+           ? QueueTempAction::kNone
+           : (hasQueue ? QueueTempAction::kDiscardTemp
+                       : QueueTempAction::kAdoptTemp);
 }
 
 constexpr bool queueFinalByteCompletesLine(int lastByte) {
