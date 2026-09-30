@@ -27,6 +27,22 @@ and in Claude Code. This is a status snapshot, not proof that external systems
 still have the same state; recheck them before changing or claiming anything.
 Task list: `TODO.md`. Bench-session sequence: `docs/BENCH_DAY_RUNBOOK.md`.
 
+## 2026-09-29 OTA recovery and usability follow-up — no hardware touched
+
+- Added OTA health validation and bootloader app rollback support. A new image
+  stays pending until setup finishes, LittleFS mounts, and the main loop remains
+  alive for 30 seconds; the firmware logs its version and OTA progress.
+- Removed the hard-coded OTA target from `firmware/platformio.ini`; operators
+  must provide the exact hostname or IP. Added `docs/OTA_RUNBOOK.md` covering
+  the one-time rollback-enabled USB baseline, release hashes, canary rollout,
+  expected serial evidence, and recovery of a bad release.
+- Pushed separately, oldest first: `4143aa4` firmware rollback/validation,
+  `d673812` health-window timing correction, `aa24570` OTA runbook and docs.
+- This checkout has no PlatformIO installation, so the new firmware was not
+  built here. No firmware was uploaded or flashed, no hardware was attached,
+  and no Supabase or Vercel state was changed. The first pilot still needs a
+  real build, a USB baseline on the board, and a canary OTA/recovery test.
+
 ## 2026-09-29 runway preparation (laptop, Claude Code) — no hardware touched
 
 - User decision: electrical diagnosis is theirs, expected on the next bench
