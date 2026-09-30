@@ -42,6 +42,9 @@ tables.
 For an existing project, confirm the original tables and the five-argument
 fleet history RPC exist, then apply the numbered migrations in order:
 
+See [supabase/MIGRATIONS.md](../supabase/MIGRATIONS.md) for the ledger,
+fresh-project distinction, and application record.
+
 ```text
 supabase/migrations/003_authenticated_ingest.sql
 supabase/migrations/004_replay_safe_observations.sql

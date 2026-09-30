@@ -89,7 +89,8 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
       `check-local.ps1` Latin-1 fix; docs no longer call the absent `pwsh`
 - [x] Add a Prototype 22 check to `supabase/verify.ps1` (2026-09-29; public
       table read and bounded-history RPC contract are now checked)
-- [ ] Apply `supabase/migrations` ordering ledger to the direct-SQL changes
+- [x] Add `supabase/MIGRATIONS.md` ordering ledger for the direct-SQL changes
+      (2026-09-29; live application is still a deployment gate)
 - [ ] Add a Prototype 22 entry to `supabase/OPERATIONS.md` (currently fleet-only)
 - [ ] Consider excluding `firmware/.pio` and `web/node_modules` from OneDrive sync
       (about 38k files, and the source of the 2026-09-26 deletion prompt); do not

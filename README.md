@@ -101,7 +101,8 @@ which errors on an existing table and would leave the function uncreated.
 The migrations are ordered and safe for the populated project: they alter only
 permissions, columns, indexes, and function definitions; they do not rewrite
 or delete existing measurement rows. Apply each numbered file once through the
-project's migration workflow.
+project's migration workflow. Keep the application record described in
+[supabase/MIGRATIONS.md](supabase/MIGRATIONS.md).
 
 Here is the table portion, verbatim from schema.sql:
 
