@@ -34,9 +34,11 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
       rated probe + reference calibration, or sign a limitation (B09)
 - [ ] S2 Energy metering: choose subset vs all 21, meter model, Facilities approval (B11)
 - [ ] S3 Signed 21-freezer inventory, device registry, two-person label check (B01, B03)
-- [ ] S4 Data integrity: migration ledger, backup + restore test (B13)
-      (replay-safe observation IDs, clock provenance, TLS validation, and OTA
-      authentication are now implemented in separate commits.)
+- [ ] S4 Data integrity: apply the ordered migration ledger and complete a
+      backup + restore test (B13). The ledger is checked in at
+      `supabase/MIGRATIONS.md`; replay-safe observation IDs, clock provenance,
+      TLS validation, and OTA authentication are implemented in separate
+      commits.
 - [x] S5 Git repository established: private
       `Enoch36Yi/ult-freezer-monitoring`, initial snapshot `893637cf` and
       `v0.1.0` prerelease (2026-09-29). The working Git checkout is outside
@@ -91,7 +93,16 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
       table read and bounded-history RPC contract are now checked)
 - [x] Add `supabase/MIGRATIONS.md` ordering ledger for the direct-SQL changes
       (2026-09-29; live application is still a deployment gate)
-- [ ] Add a Prototype 22 entry to `supabase/OPERATIONS.md` (currently fleet-only)
+- [x] Add a Prototype 22 entry to `supabase/OPERATIONS.md` (2026-09-29; includes
+      the separate table/RPC/identity and no-data verification guidance)
+- [x] Add a private device-registry format and example without inventory
+      secrets (`docs/DEVICE_REGISTRY.md`, 2026-09-29)
+- [x] Add repository CI coverage for web, firmware, schema/API contracts,
+      credential patterns, and audit/export script tests (2026-09-29)
+- [x] Add a bounded, hashed raw-readings export runbook; it is an operational
+      snapshot tool, not a backup (`docs/RAW_EXPORT_RUNBOOK.md`, 2026-09-29)
+- [x] Harden dashboard loading, partial-refresh, outage, retry, tier-switch,
+      focus, contrast, and touch-target states (`08af91c`, 2026-09-29)
 - [ ] Consider excluding `firmware/.pio` and `web/node_modules` from OneDrive sync
       (about 38k files, and the source of the 2026-09-26 deletion prompt); do not
       delete them without checking sync state

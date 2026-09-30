@@ -1,5 +1,28 @@
 # ULT freezer project — cross-machine handoff
 
+## 2026-09-29 repository sweep follow-up — pushed, no external state changed
+
+- Pushed the remaining repo-only hardening as separate commits on `main`:
+  `e3b917e` repository CI, `5f4deeb` authenticated ingest tests, `a711d06`
+  queue/OTA safety-gate tests, `0cb5942` migration ledger, `873219d` Prototype
+  22 operations, `029255a` private device-registry format, `485c347` schema/API
+  contract checks, `78ef329` hashed raw-readings export, `eb4e732` nonce-safe
+  dynamic rendering, `6a2b435` repository script tests in CI, and `08af91c`
+  dashboard loading/recovery usability hardening.
+- The dashboard now separates loading from no-data, preserves successful values
+  during partial fleet refresh failures, clears stale values on sensor-tier
+  changes, exposes retry actions, uses accurate outage provenance copy, and
+  keeps focus/touch targets usable on mobile. An isolated optimized build was
+  checked with empty and outage mock APIs at desktop and mobile sizes; two
+  independent final visual reviews passed.
+- Checks completed: web tests, type-check and optimized Webpack build in the
+  isolated QA copy, 30 schema/API contract checks, audit/export script tests,
+  and `git diff --check`. PlatformIO, live SQL, Vercel, OTA, and hardware were
+  not run here. No device was flashed and no live service state changed.
+- Before release, apply the ordered migrations, run the deployment steps in
+  `docs/DEPLOYMENT.md`, and verify the deployed commit. The existing external
+  deployment was not changed by this session.
+
 ## 2026-09-29 post-audit hardening — pushed, no hardware touched
 
 - Pushed isolated fixes on `main`: `c793fe3` OTA rebind after Wi-Fi loss,
