@@ -75,6 +75,9 @@ jobs:
       - name: Check schema and API contracts
         run: node scripts/schema-contract-check.mjs
 
+      - name: Run repository script tests
+        run: node --test scripts/audit-readings.test.mjs scripts/export-readings.test.mjs
+
       - name: Scan tracked text for common credentials
         shell: bash
         run: |
