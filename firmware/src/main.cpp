@@ -993,6 +993,13 @@ void setup() {
   // If there is no network yet, onWifiConnected() does all of the above the
   // moment one appears. Sampling starts either way.
 
+  // Provisioning can block while a user enters Wi-Fi details. Start the
+  // rollback health window only after setup has completed and loop() is about
+  // to provide normal service.
+  if (g_otaValidationPending) {
+    g_otaValidationStartedAt = millis();
+  }
+
   // Take the first reading immediately rather than waiting a full interval.
   g_lastSampleAt = millis() - g_sampleIntervalMs;
 }
