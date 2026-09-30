@@ -499,6 +499,67 @@ static bool recoverQueueTemp() {
   return true;
 }
 
+// An append can lose power after writing the JSON bytes but before writing the
+// final newline. Keep every complete line and discard only that incomplete
+// tail. Rebuild through the temp path so a second power cut preserves the
+// original queue rather than destroying it.
+static bool repairQueueTail() {
+  if (!g_filesystemReady || !LittleFS.exists(QUEUE_PATH)) return true;
+
+  File probe = LittleFS.open(QUEUE_PATH, FILE_READ);
+  if (!probe) return false;
+  const size_t originalSize = probe.size();
+  if (originalSize == 0) {
+    probe.close();
+    return true;
+  }
+  if (!probe.seek(originalSize - 1)) {
+    probe.close();
+    return false;
+  }
+  const int lastByte = probe.read();
+  probe.close();
+  if (lastByte == '\n') return true;
+
+  File in = LittleFS.open(QUEUE_PATH, FILE_READ);
+  File out = LittleFS.open(QUEUE_TMP_PATH, FILE_WRITE);
+  if (!in || !out) {
+    if (in) in.close();
+    if (out) out.close();
+    return false;
+  }
+
+  bool complete = true;
+  while (in.available()) {
+    String line = in.readStringUntil('\n');
+    // The final read reached EOF without a newline, so it is the partial
+    // record. All earlier reads ended before originalSize and are complete.
+    if (in.position() >= originalSize) break;
+    line.trim();
+    if (!line.isEmpty() && out.println(line) == 0) {
+      complete = false;
+      break;
+    }
+  }
+  out.close();
+  in.close();
+
+  if (!complete) {
+    Serial.println("[queue] partial-tail repair failed; original queue preserved");
+    return false;
+  }
+  if (!LittleFS.remove(QUEUE_PATH)) {
+    Serial.println("[queue] partial-tail repair could not remove original queue");
+    return false;
+  }
+  if (!LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
+    Serial.println("[queue] partial-tail repair could not install replacement");
+    return recoverQueueTemp();
+  }
+  Serial.println("[queue] discarded incomplete final record after interrupted write");
+  return true;
+}
+
 static void mountFilesystem() {
   if (!LittleFS.begin(false)) {
     Serial.println("[fs] mount failed; refusing to format so buffered data is preserved");
@@ -509,7 +570,8 @@ static void mountFilesystem() {
                 (unsigned)(LittleFS.totalBytes() - LittleFS.usedBytes()));
 
   recoverQueueTemp();
-  g_queuePresence.onMount(LittleFS.exists(QUEUE_PATH));
+  repairQueueTail();
+  g_queuePresence.onMount(LittleFS.exists(QUEUE_PATH) || LittleFS.exists(QUEUE_TMP_PATH));
 }
 
 // Drops the oldest half of the queue when it hits the cap. Losing the oldest
@@ -518,7 +580,7 @@ static void mountFilesystem() {
 static bool trimQueueIfNeeded() {
   if (!g_filesystemReady) return false;
   if (!g_queuePresence.hasData()) return true;
-  if (!recoverQueueTemp()) return false;
+  if (!recoverQueueTemp() || !repairQueueTail()) return false;
   File f = LittleFS.open(QUEUE_PATH, FILE_READ);
   if (!f) return false;
   const size_t size = f.size();
@@ -586,18 +648,18 @@ static bool enqueueReading(const String &json) {
   return true;
 }
 
-static size_t queuedCount() {
-  if (!g_filesystemReady || !recoverQueueTemp()) return 0;
+static bool queuedCount(size_t &count) {
+  count = 0;
+  if (!g_filesystemReady || !recoverQueueTemp() || !repairQueueTail()) return false;
   File f = LittleFS.open(QUEUE_PATH, FILE_READ);
-  if (!f) return 0;
-  size_t n = 0;
+  if (!f) return false;
   while (f.available()) {
     String line = f.readStringUntil('\n');
     line.trim();
-    if (!line.isEmpty()) n++;
+    if (!line.isEmpty()) count++;
   }
   f.close();
-  return n;
+  return true;
 }
 
 // --- Posting ---------------------------------------------------------------
@@ -654,7 +716,11 @@ static void flushQueue() {
   if (WiFi.status() != WL_CONNECTED) return;
   if (!recoverQueueTemp()) return;
 
-  const size_t pending = queuedCount();
+  size_t pending = 0;
+  if (!queuedCount(pending)) {
+    Serial.println("[queue] could not inspect queue; preserving it for retry");
+    return;
+  }
   if (pending == 0) {
     if (LittleFS.remove(QUEUE_PATH)) {
       g_queuePresence.onFlushRemaining(0);
