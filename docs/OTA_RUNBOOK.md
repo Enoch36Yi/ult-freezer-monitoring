@@ -14,6 +14,14 @@ This is recovery from a bad application image, not a guarantee against every
 hardware failure. A damaged bootloader, erased flash, invalid partition table,
 or a board with no network and no serial access still needs USB recovery.
 
+The OTA password hash is upload authentication on the trusted device network;
+it is not cryptographic firmware signing. This repository does not enable
+secure boot or flash encryption. Treat the release manifest, private network,
+and canary procedure as required controls, and do not expose ArduinoOTA to the
+public internet. If the hardware security posture requires signed images,
+secure boot, or encrypted flash, make that a separately validated hardware and
+bootloader release gate before calling the system production-secure.
+
 ## One-time baseline for existing nodes
 
 Rollback is a bootloader feature. An OTA upload does not replace the

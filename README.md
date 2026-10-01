@@ -277,14 +277,15 @@ need one authorized USB baseline flash to install that bootloader behavior.
 
 - **By freezer ID:** IDs 1–6 read and post every **1 minute**; IDs 7–21
   read and post every **15 minutes**. Each reading contains
-  `{freezer_id, device_id, firmware_version, observation_id, temp_c, rssi, sensor_tier, recorded_at, clock_valid}` and is POSTed to the
+  `{freezer_id, device_id, firmware_version, payload_version, observation_id, temp_c, rssi, sensor_tier, recorded_at, clock_valid}` and is POSTed to the
   authenticated `/api/ingest` route with a per-device HMAC signature.
 - **On send failure** — no WiFi, request error, timeout — the reading is
   appended to `/queue.jsonl` on LittleFS instead of being dropped.
 - **On every successful WiFi connect** (boot or reconnect) the queue is flushed
   oldest-first before live posting resumes. A flush stops at the first failure
   and keeps the rest of the file intact, so ordering is never scrambled.
-  Unattended multi-week logging does not lose data across WiFi dropouts.
+  Unattended multi-week logging does not lose data across WiFi dropouts; failed
+  flushes use exponential backoff and preserve the queue for operator repair.
 - **Buffer capacity:** the `default.csv` partition table leaves ~1.4 MB for
   LittleFS. At ~180 bytes per reading, the 1 MB queue holds roughly **3.8
   days** for core IDs 1–6 or **58 days** for fleet IDs 7–21. Past the cap the
