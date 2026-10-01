@@ -29,6 +29,7 @@ continuing:
 | `007_latest_received_index.sql` | Index server receipt time for liveness | Latest queries use receipt-time indexes |
 | `008_firmware_version.sql` | Record the producing firmware build | Both tables expose nullable `firmware_version` |
 | `009_payload_version.sql` | Record the telemetry payload contract | Both tables expose `payload_version=1` |
+| `010_latest_readings_rpc.sql` | Batch fleet latest-reading lookup | `readings_latest(text)` returns at most one row per freezer |
 
 The application/API deployment should follow migration 009. Deploying code
 that writes `payload_version` before applying 009 will make authenticated

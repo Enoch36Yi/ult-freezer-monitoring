@@ -47,6 +47,20 @@ try {
 } catch { Add-Check 'readings_contract' $false (Get-ApiFailure $_) }
 $headers.Remove('Prefer')
 
+try {
+    $response = Read-Api '/rest/v1/rpc/readings_latest?p_sensor_tier=esp32_ds18b20'
+    $latestRows = @(ConvertFrom-JsonArray $response.Content)
+    $seen = @{}
+    foreach ($row in $latestRows) {
+        if ($seen.ContainsKey([string]$row.freezer_id)) { throw "Duplicate latest row for freezer $($row.freezer_id)" }
+        $seen[[string]$row.freezer_id] = $true
+        foreach ($field in @('freezer_id', 'temp_c', 'recorded_at', 'received_at')) {
+            if ($field -notin $row.PSObject.Properties.Name) { throw "Missing latest RPC field: $field" }
+        }
+    }
+    Add-Check 'latest_readings_rpc' $true ("Batched latest RPC returned $($latestRows.Count) freezer rows.")
+} catch { Add-Check 'latest_readings_rpc' $false (Get-ApiFailure $_) }
+
 for ($id = 1; $id -le 21; $id++) {
     $interval = if ($id -le 6) { 60 } else { 900 }
     try {
