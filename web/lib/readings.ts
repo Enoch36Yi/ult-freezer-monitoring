@@ -10,35 +10,33 @@ const PAGE_SIZE = 1000;
 const PAGE_CONCURRENCY = 8;
 
 /**
- * Latest reading for every freezer, as one small query per node.
+ * Latest reading for every freezer, as one tier-scoped RPC.
  *
- * A single "recent rows" query would silently drop any node that has been
- * offline longer than the window — exactly the node you most need to see — so
- * each freezer gets its own `limit 1`. Twenty-one indexed lookups on
- * (freezer_id, received_at desc) is cheap, and they run in parallel. A failed
- * lookup is returned separately so one transient node/query failure does not
- * erase the other nodes' values. Receipt time is the server-side liveness
- * signal; recorded_at remains the sensor's measurement time for charts and
- * provenance.
+ * The database function returns at most one row per freezer, including nodes
+ * that have been offline for a long time. Receipt time is the server-side
+ * liveness signal; recorded_at remains the sensor's measurement time for
+ * charts and provenance. A single RPC keeps every browser refresh from
+ * multiplying into 21 independent PostgREST requests.
  */
 export async function fetchLatestPerFreezer(
   tier: SensorTier,
 ): Promise<{ readings: Map<number, LatestReading>; failedIds: number[] }> {
-  const results = await Promise.allSettled(
-    FREEZER_IDS.map((id) => fetchLatest(id, tier)),
-  );
-
   const byId = new Map<number, LatestReading>();
-  const failedIds: number[] = [];
-  results.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      const row = result.value;
-      if (row) byId.set(row.freezer_id, row);
-    } else {
-      failedIds.push(FREEZER_IDS[index]);
-    }
+  const { data, error } = await supabase.rpc("readings_latest", {
+    p_sensor_tier: tier,
   });
-  return { readings: byId, failedIds };
+
+  if (error) throw error;
+  for (const row of data ?? []) {
+    const freezerId = Number(row.freezer_id);
+    if (!FREEZER_IDS.includes(freezerId)) continue;
+    byId.set(freezerId, {
+      ...row,
+      freezer_id: freezerId,
+      temp_c: Number(row.temp_c),
+    } as LatestReading);
+  }
+  return { readings: byId, failedIds: [] };
 }
 
 /** Most recent reading for one freezer, independent of any chart range. */
