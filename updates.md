@@ -14,7 +14,8 @@
   of oldest readings dropped at the flash cap.
 - The ingest route now requires JSON, uses request IDs, bounds the upstream
   call, records payload version 1, and reports received/inserted/duplicate
-  counts. Provider-level rate limiting is documented but not configured here.
+  counts. Commit `e914336` keeps the same timeout active through upstream body
+  parsing. Provider-level rate limiting is documented but not configured here.
 - Existing projects need migrations `009_payload_version.sql` and
   `010_latest_readings_rpc.sql` applied in order before deploying the matching
   code. Fresh-project schema files include both changes.
