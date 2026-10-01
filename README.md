@@ -25,6 +25,9 @@ before its dashboard card can fetch from Supabase; this is independent of the
 21-freezer `readings` table.
 
 Deployment instructions are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+The operator release and data-protection checklists are in
+[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) and
+[docs/DATA_OPERATIONS.md](docs/DATA_OPERATIONS.md).
 
 **The dashboard uses a publishable key plus row-level security for public reads.**
 Devices use per-device HMAC credentials through the authenticated ingestion route;
