@@ -11,6 +11,7 @@ const reading = {
   device_id: DEVICE_ID,
   firmware_version: "0.2.0",
   observation_id: `${DEVICE_ID}-123-1`,
+  payload_version: 1,
   sensor_tier: "esp32_ds18b20",
   temp_c: -72.125,
   rssi: -48,
@@ -49,7 +50,7 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
 
   globalThis.fetch = async (input, init) => {
     upstreamCalls.push({ input, init });
-    return new Response(null, { status: 201 });
+    return Response.json([reading], { status: 201 });
   };
   t.after(() => {
     globalThis.fetch = originalFetch;
@@ -66,10 +67,18 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
     const response = await POST(signedRequest(body));
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accepted: 1 });
+    assert.deepEqual(await response.json(), {
+      received: 1,
+      accepted: 1,
+      duplicates: 0,
+      request_id: response.headers.get("x-request-id"),
+    });
+    assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
     assert.equal(upstreamCalls.length, 1);
     assert.equal(String(upstreamCalls[0].input), "https://db.example.test/rest/v1/readings");
     assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [reading]);
+    assert.equal((upstreamCalls[0].init?.signal as AbortSignal).aborted, false);
+    assert.match(String(new Headers(upstreamCalls[0].init?.headers).get("Prefer")), /return=representation/);
   });
 
   await t.test("rejects a bad signature before contacting Supabase", async () => {
@@ -106,5 +115,32 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
 
     const invalid = JSON.stringify({ ...reading, firmware_version: "release/0.2.0" });
     assert.equal((await POST(signedRequest(invalid))).status, 400);
+  });
+
+  await t.test("rejects non-JSON bodies before reading or forwarding them", async () => {
+    configure();
+    upstreamCalls.length = 0;
+    const response = await POST(signedRequest(JSON.stringify(reading), {
+      "content-type": "text/plain",
+    }));
+
+    assert.equal(response.status, 415);
+    assert.equal(upstreamCalls.length, 0);
+  });
+
+  await t.test("turns an upstream timeout into a bounded gateway response", async () => {
+    configure();
+    upstreamCalls.length = 0;
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new DOMException("aborted", "AbortError");
+    };
+    try {
+      const response = await POST(signedRequest(JSON.stringify(reading)));
+      assert.equal(response.status, 504);
+      assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   });
 });
