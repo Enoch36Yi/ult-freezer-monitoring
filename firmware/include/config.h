@@ -30,6 +30,7 @@
 // Sampling / reporting
 // ---------------------------------------------------------------------------
 #define FIRMWARE_VERSION "0.2.0"
+#define TELEMETRY_PAYLOAD_VERSION 1
 #define SENSOR_TIER "esp32_ds18b20"
 
 #define FREEZER_ID_MIN 1

@@ -7,6 +7,7 @@ create table public.prototype_readings (
   prototype_id smallint not null default 22 check (prototype_id = 22),
   device_id text not null,
   firmware_version text,
+  payload_version smallint not null default 1 check (payload_version = 1),
   observation_id text not null,
   sensor_tier text not null default 'esp32_ds18b20'
     check (sensor_tier = 'esp32_ds18b20'),

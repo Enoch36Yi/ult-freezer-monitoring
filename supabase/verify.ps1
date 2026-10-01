@@ -42,7 +42,7 @@ $now = [DateTimeOffset]::UtcNow
 $fleet = [System.Collections.Generic.List[object]]::new()
 try {
     $headers['Prefer'] = 'count=exact'
-    $response = Read-Api '/rest/v1/readings?select=id,freezer_id,sensor_tier,temp_c,rssi,reset_reason,firmware_version,recorded_at,received_at&limit=1'
+    $response = Read-Api '/rest/v1/readings?select=id,freezer_id,sensor_tier,temp_c,rssi,reset_reason,firmware_version,payload_version,recorded_at,received_at&limit=1'
     Add-Check 'readings_contract' $true ('Public read succeeded; Content-Range: ' + ($response.Headers['Content-Range'] -join ', '))
 } catch { Add-Check 'readings_contract' $false (Get-ApiFailure $_) }
 $headers.Remove('Prefer')
@@ -50,7 +50,7 @@ $headers.Remove('Prefer')
 for ($id = 1; $id -le 21; $id++) {
     $interval = if ($id -le 6) { 60 } else { 900 }
     try {
-        $response = Read-Api ('/rest/v1/readings?select=id,temp_c,firmware_version,recorded_at,received_at&freezer_id=eq.' + $id + '&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1')
+        $response = Read-Api ('/rest/v1/readings?select=id,temp_c,firmware_version,payload_version,recorded_at,received_at&freezer_id=eq.' + $id + '&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1')
         $rows = @(ConvertFrom-JsonArray $response.Content)
         $latest = if ($rows.Count -gt 0) { $rows[0] } else { $null }
         $state = 'no_data'
@@ -70,7 +70,7 @@ for ($id = 1; $id -le 21; $id++) {
 
 $prototypeLatest = $null
 try {
-    $response = Read-Api '/rest/v1/prototype_readings?select=id,prototype_id,sensor_tier,temp_c,firmware_version,recorded_at,received_at&prototype_id=eq.22&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1'
+    $response = Read-Api '/rest/v1/prototype_readings?select=id,prototype_id,sensor_tier,temp_c,firmware_version,payload_version,recorded_at,received_at&prototype_id=eq.22&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1'
     $rows = @(ConvertFrom-JsonArray $response.Content)
     $prototypeLatest = if ($rows.Count -gt 0) { $rows[0] } else { $null }
     $state = 'no_data'

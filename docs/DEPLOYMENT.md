@@ -52,6 +52,7 @@ supabase/migrations/005_clock_provenance.sql
 supabase/migrations/006_bound_history_rpc.sql
 supabase/migrations/007_latest_received_index.sql
 supabase/migrations/008_firmware_version.sql
+supabase/migrations/009_payload_version.sql
 ```
 
 If Prototype 22 has not been created yet, run `supabase/prototype22.sql` first.
@@ -61,6 +62,7 @@ Afterward, verify that:
 
 - `anon` has SELECT but not INSERT on `readings` and `prototype_readings`;
 - the device/observation unique indexes exist;
+- both tables require `payload_version=1` for new telemetry;
 - both history functions reject unsupported bucket widths and ranges over ten
   years;
 - existing rows remain unchanged.
