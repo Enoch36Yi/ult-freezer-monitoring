@@ -25,6 +25,7 @@
 
 #include "config.h"
 #include "ota_health.h"
+#include "post_policy.h"
 #include "queue_presence.h"
 #include "queue_recovery.h"
 #include "sampling_policy.h"
@@ -74,6 +75,9 @@ static uint32_t g_otaValidationStartedAt = 0;
 static bool g_otaInProgress = false;
 static uint8_t g_otaLastProgress = 255;
 static bool g_otaStarted = false;
+static uint32_t g_queueRetryAt = 0;
+static uint32_t g_queueRetryDelayMs = QUEUE_FLUSH_RETRY_MS;
+static bool g_queueRetryScheduled = false;
 
 // --- Small helpers ---------------------------------------------------------
 
@@ -598,8 +602,13 @@ static bool trimQueueIfNeeded() {
   }
 
   Serial.printf("[queue] %u bytes, trimming oldest half\n", (unsigned)size);
+  size_t dropped = 0;
+  f.seek(0);
+  while (f.position() < size / 2 && f.available()) {
+    if (f.read() == '\n') dropped++;
+  }
   f.seek(size / 2);
-  f.readStringUntil('\n');  // discard the partial line we landed in
+  if (!f.readStringUntil('\n').isEmpty()) dropped++;
 
   File out = LittleFS.open(QUEUE_TMP_PATH, FILE_WRITE);
   if (!out) {
@@ -632,6 +641,8 @@ static bool trimQueueIfNeeded() {
     Serial.println("[queue] trim could not install replacement queue");
     return recoverQueueTemp();
   }
+  Serial.printf("[queue] dropped %u oldest readings to stay within flash cap\n",
+                (unsigned)dropped);
   return true;
 }
 
@@ -672,15 +683,33 @@ static bool queuedCount(size_t &count) {
 
 // --- Posting ---------------------------------------------------------------
 
+static void scheduleQueueRetry() {
+  g_queueRetryAt = millis() + g_queueRetryDelayMs;
+  g_queueRetryScheduled = true;
+  if (g_queueRetryDelayMs < QUEUE_FLUSH_MAX_RETRY_MS / 2UL) {
+    g_queueRetryDelayMs *= 2UL;
+  } else {
+    g_queueRetryDelayMs = QUEUE_FLUSH_MAX_RETRY_MS;
+  }
+  Serial.printf("[queue] next retry in %lu seconds\n",
+                static_cast<unsigned long>((g_queueRetryAt - millis()) / 1000UL));
+}
+
+static void resetQueueRetry() {
+  g_queueRetryAt = 0;
+  g_queueRetryDelayMs = QUEUE_FLUSH_RETRY_MS;
+  g_queueRetryScheduled = false;
+}
+
 // Posts one already-serialized JSON object to the readings table.
-static bool postJson(const String &body) {
-  if (WiFi.status() != WL_CONNECTED) return false;
+static PostResult postJson(const String &body) {
+  if (WiFi.status() != WL_CONNECTED) return PostResult::kRetryableFailure;
 
   const String secret = ingestSecret();
   char signature[65];
   if (!signBody(body, secret, signature)) {
     Serial.println("[auth] device secret is not configured; refusing telemetry");
-    return false;
+    return PostResult::kPermanentFailure;
   }
 
   WiFiClientSecure client;
@@ -692,7 +721,7 @@ static bool postJson(const String &body) {
 
   if (!http.begin(client, INGEST_URL)) {
     Serial.println("[http] begin failed");
-    return false;
+    return PostResult::kRetryableFailure;
   }
 
   http.addHeader("Content-Type", "application/json");
@@ -701,15 +730,15 @@ static bool postJson(const String &body) {
   http.addHeader("Prefer", "return=minimal");
 
   const int status = http.POST(body);
-  const bool ok = (status >= 200 && status < 300);
+  const PostResult result = classifyPostStatus(status);
 
-  if (!ok) {
+  if (result != PostResult::kDelivered) {
     Serial.printf("[http] POST failed, status %d: %s\n", status,
                   http.errorToString(status).c_str());
   }
 
   http.end();
-  return ok;
+  return result;
 }
 
 // Pushes queued readings oldest-first, in batches. Stops at the first failed
@@ -722,16 +751,21 @@ static bool postJson(const String &body) {
 static void flushQueue() {
   if (!g_filesystemReady || !g_queuePresence.hasData()) return;
   if (WiFi.status() != WL_CONNECTED) return;
-  if (!recoverQueueTemp()) return;
+  if (!recoverQueueTemp()) {
+    scheduleQueueRetry();
+    return;
+  }
 
   size_t pending = 0;
   if (!queuedCount(pending)) {
     Serial.println("[queue] could not inspect queue; preserving it for retry");
+    scheduleQueueRetry();
     return;
   }
   if (pending == 0) {
     if (LittleFS.remove(QUEUE_PATH)) {
       g_queuePresence.onFlushRemaining(0);
+      resetQueueRetry();
     } else {
       Serial.println("[queue] could not remove empty queue file");
     }
@@ -766,10 +800,11 @@ static void flushQueue() {
     if (inBatch == 0) break;
     body += ']';
 
-    if (postJson(body)) {
+    const PostResult result = postJson(body);
+    if (result == PostResult::kDelivered) {
       sent += inBatch;
       batches++;
-      ArduinoOTA.handle();
+      if (g_otaStarted) ArduinoOTA.handle();
       if (batches >= QUEUE_FLUSH_MAX_BATCHES) {
         // Yield to loop() so sampling and OTA are not starved; the rest goes
         // out on the next retry, which serviceQueue() schedules.
@@ -777,6 +812,9 @@ static void flushQueue() {
       }
     } else {
       in.seek(batchStart);  // nothing in this batch was accepted
+      Serial.printf("[queue] %s; preserving batch of %u readings\n",
+                    postResultName(result), (unsigned)inBatch);
+      scheduleQueueRetry();
       stalled = true;
     }
   }
@@ -787,6 +825,7 @@ static void flushQueue() {
   if (!out) {
     in.close();
     Serial.println("[queue] could not open temp file; queue left intact");
+    scheduleQueueRetry();
     return;
   }
   bool complete = true;
@@ -805,6 +844,7 @@ static void flushQueue() {
 
   if (!complete) {
     Serial.println("[queue] flush copy failed; original queue preserved");
+    scheduleQueueRetry();
     return;
   }
 
@@ -812,21 +852,30 @@ static void flushQueue() {
   // mountFilesystem() adopts it on the next boot.
   if (!LittleFS.remove(QUEUE_PATH)) {
     Serial.println("[queue] flush could not remove original queue; preserving both copies");
+    scheduleQueueRetry();
     return;
   }
   if (kept > 0) {
     if (!LittleFS.rename(QUEUE_TMP_PATH, QUEUE_PATH)) {
       Serial.println("[queue] flush could not install replacement queue");
       recoverQueueTemp();
+      scheduleQueueRetry();
       return;
     }
   } else {
     if (!LittleFS.remove(QUEUE_TMP_PATH)) {
       Serial.println("[queue] flushed queue but could not remove empty temp file");
+      scheduleQueueRetry();
       return;
     }
   }
   g_queuePresence.onFlushRemaining(kept);
+  if (kept > 0) {
+    g_queueRetryDelayMs = QUEUE_FLUSH_RETRY_MS;
+    scheduleQueueRetry();
+  } else {
+    resetQueueRetry();
+  }
 
   Serial.printf("[queue] flushed %u, %u still buffered\n", (unsigned)sent,
                 (unsigned)kept);
@@ -836,12 +885,11 @@ static void flushQueue() {
 // hit its batch cap would sit untouched until the next WiFi reconnect, which
 // on a stable network may never come.
 static void serviceQueue() {
-  static uint32_t lastAttempt = 0;
   if (WiFi.status() != WL_CONNECTED) return;
   if (!g_queuePresence.hasData()) return;
   const uint32_t now = millis();
-  if (now - lastAttempt < QUEUE_FLUSH_RETRY_MS) return;
-  lastAttempt = now;
+  if (g_queueRetryScheduled && static_cast<int32_t>(now - g_queueRetryAt) < 0) return;
+  g_queueRetryScheduled = true;
   flushQueue();
 }
 
@@ -920,7 +968,8 @@ static void sampleAndSend() {
   const String payload = buildReading(tempC);
   Serial.printf("[reading] %s\n", payload.c_str());
 
-  if (WiFi.status() == WL_CONNECTED && postJson(payload)) {
+  if (WiFi.status() == WL_CONNECTED &&
+      postJson(payload) == PostResult::kDelivered) {
     Serial.println("[reading] posted");
     g_pendingResetReason = "";
   } else if (enqueueReading(payload)) {
@@ -947,6 +996,7 @@ static void onWifiConnected() {
   if (!g_otaStarted) {
     g_otaStarted = initOta();
   }
+  resetQueueRetry();
   flushQueue();
 }
 
@@ -1092,7 +1142,7 @@ void setup() {
 }
 
 void loop() {
-  ArduinoOTA.handle();
+  if (g_otaStarted) ArduinoOTA.handle();
   serviceOtaValidation();
   serviceWifi();
   serviceNtp();

@@ -69,6 +69,10 @@
 #define QUEUE_FLUSH_MAX_BATCHES 4
 // Retry cadence for a backlog that did not clear in one pass.
 #define QUEUE_FLUSH_RETRY_MS 60000UL
+// A bad credential or payload must not hammer the ingestion endpoint forever.
+// The queue remains intact for operator repair, but retries back off to this
+// ceiling until a later network reconnect resets the schedule.
+#define QUEUE_FLUSH_MAX_RETRY_MS (30UL * 60UL * 1000UL)
 
 // ---------------------------------------------------------------------------
 // Network / time
