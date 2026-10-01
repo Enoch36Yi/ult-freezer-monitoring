@@ -20,7 +20,7 @@ const PAGE_CONCURRENCY = 8;
  */
 export async function fetchLatestPerFreezer(
   tier: SensorTier,
-): Promise<{ readings: Map<number, LatestReading>; failedIds: number[] }> {
+): Promise<Map<number, LatestReading>> {
   const byId = new Map<number, LatestReading>();
   const { data, error } = await supabase.rpc("readings_latest", {
     p_sensor_tier: tier,
@@ -36,7 +36,7 @@ export async function fetchLatestPerFreezer(
       temp_c: Number(row.temp_c),
     } as LatestReading);
   }
-  return { readings: byId, failedIds: [] };
+  return byId;
 }
 
 /** Most recent reading for one freezer, independent of any chart range. */

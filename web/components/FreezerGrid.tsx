@@ -20,7 +20,6 @@ export function FreezerGrid() {
   const [now, setNow] = useState(() => Date.now());
   const [tier, setTier] = useSensorTier();
   const requestId = useRef(0);
-  const readingsRef = useRef(readings);
 
   const refresh = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -28,21 +27,13 @@ export function FreezerGrid() {
     try {
       const latest = await fetchLatestPerFreezer(tier);
       if (currentRequest !== requestId.current) return;
-      const hadPreviousReadings = readingsRef.current.size > 0;
       setReadings((previous) => {
         const next = new Map(previous);
-        for (const row of latest.readings.values()) next.set(row.freezer_id, row);
-        readingsRef.current = next;
+        for (const row of latest.values()) next.set(row.freezer_id, row);
         return next;
       });
-      if (latest.readings.size > 0) setLastUpdated(Date.now());
-      setError(
-        latest.failedIds.length > 0
-          ? hadPreviousReadings
-            ? `${latest.failedIds.length} freezer${latest.failedIds.length === 1 ? "" : "s"} could not refresh. Showing the last successful values.`
-            : `Refresh failed for ${latest.failedIds.length} freezer${latest.failedIds.length === 1 ? "" : "s"}. No previous readings are available.`
-          : null,
-      );
+      if (latest.size > 0) setLastUpdated(Date.now());
+      setError(null);
     } catch {
       if (currentRequest !== requestId.current) return;
       setError("Could not load readings right now. Try again later.");
@@ -58,7 +49,6 @@ export function FreezerGrid() {
     // A tier switch must not leave values from the previous stream visible
     // while the new stream is loading.
     const emptyReadings = new Map<number, LatestReading>();
-    readingsRef.current = emptyReadings;
     setReadings(emptyReadings);
     setLastUpdated(null);
     setError(null);
