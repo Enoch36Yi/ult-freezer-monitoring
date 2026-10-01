@@ -65,6 +65,17 @@ at least:
 | Canary node |  |
 | Validation log / date |  |
 
+The repository helper can produce the hash and source revision together:
+
+```bash
+node scripts/create-release-manifest.mjs --output release-manifest.json \
+  .pio/build/esp32-s3-ota/firmware.bin
+```
+
+Keep the manifest with the binary and compare its SHA-256 to the artifact
+selected for the canary. It contains no credentials and should not be treated
+as proof that the node accepted the image.
+
 Do not update the whole fleet at once. Use one canary node first, then wait for
 its real authenticated reading and health-validation log before proceeding.
 

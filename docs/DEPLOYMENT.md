@@ -156,6 +156,18 @@ python -m platformio run -e prototype-22      # Prototype 22 image
 Record each `firmware.bin` SHA-256 with the node/device ID. The build is not a
 flash authorization. Do not erase NVS or LittleFS during normal upgrades.
 
+For a release record that can be checked without retaining an absolute build
+path, run the repository helper against the exact image being handed off:
+
+```bash
+node scripts/create-release-manifest.mjs --output release-manifest.json \
+  firmware/.pio/build/esp32-s3/firmware.bin
+```
+
+Store that manifest beside the private release archive. It records the Git
+revision, artifact size, and SHA-256; it does not contain Wi-Fi, OTA, or ingest
+credentials. The output filename is ignored by Git.
+
 ## 6. Commission fleet nodes
 
 Apply the database migrations and deploy the server route before revoking old

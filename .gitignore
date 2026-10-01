@@ -16,5 +16,6 @@ __pycache__/
 *.map
 *.pem
 *.key
+release-manifest*.json
 **/.env*
 !**/.env.example
