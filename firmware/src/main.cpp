@@ -774,7 +774,11 @@ static void flushQueue() {
   Serial.printf("[queue] flushing %u buffered readings\n", (unsigned)pending);
 
   File in = LittleFS.open(QUEUE_PATH, FILE_READ);
-  if (!in) return;
+  if (!in) {
+    Serial.println("[queue] could not open queue for flush; preserving it for retry");
+    scheduleQueueRetry();
+    return;
+  }
 
   size_t sent = 0;
   size_t batches = 0;
