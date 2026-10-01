@@ -1,5 +1,35 @@
 # ULT freezer project — cross-machine handoff
 
+# 2026-09-30 repository-only reliability and release follow-up — no external state changed
+
+- Added focused local commits: `f4f2138` firmware upload-result classification
+  and queue backoff, `5b5b5ed` bounded/correlated ingest responses,
+  `a2993bb` payload-version schema, `d78c8a5` batched latest-reading RPC,
+  `6ebb454` dashboard use of that RPC, `e7520dc` pinned firmware dependencies
+  and release manifests, `370e043` release/data operations handoff,
+  `df0b124` dashboard refresh-contract cleanup, `f83cf60` queue I/O backoff,
+  and `5eb313c` telemetry/OTA security-boundary documentation.
+- Firmware now preserves queued data across permanent HTTP errors while using
+  classified retry behavior and exponential backoff; trimming logs the number
+  of oldest readings dropped at the flash cap.
+- The ingest route now requires JSON, uses request IDs, bounds the upstream
+  call, records payload version 1, and reports received/inserted/duplicate
+  counts. Provider-level rate limiting is documented but not configured here.
+- Existing projects need migrations `009_payload_version.sql` and
+  `010_latest_readings_rpc.sql` applied in order before deploying the matching
+  code. Fresh-project schema files include both changes.
+- Added `STATUS.md`, `docs/RELEASE_CHECKLIST.md`, and
+  `docs/DATA_OPERATIONS.md` so operators have explicit migration, backup,
+  retention, rate-limit, secret-rotation, OTA, and restore gates.
+- Local validation: `git diff --check`, release-manifest syntax/smoke check,
+  and the web unit suite passed. TypeScript/build checks could not run in this
+  environment because `tsc` is not installed; PlatformIO firmware tests/builds
+  were not run because Python has no PlatformIO module here.
+- No live Supabase/Vercel change, device flash, OTA upload, credential change,
+  or hardware action was performed.
+
+Last updated: 2026-09-30. External state still requires fresh verification.
+
 ## 2026-09-29 repository sweep follow-up — pushed, no external state changed
 
 - Pushed the remaining repo-only hardening as separate commits on `main`:
