@@ -172,6 +172,7 @@ export async function POST(request: Request) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   let upstream: Response;
+  let inserted: unknown = null;
   try {
     upstream = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
       method: "POST",
@@ -187,6 +188,13 @@ export async function POST(request: Request) {
       cache: "no-store",
       signal: controller.signal,
     });
+    if (upstream.ok) {
+      try {
+        inserted = await upstream.json();
+      } catch {
+        inserted = null;
+      }
+    }
   } catch (error) {
     const reason = error instanceof Error ? error.name : "unknown";
     console.error(`[ingest] upstream request failed request_id=${requestId} device_id=${deviceId} reason=${reason}`);
@@ -196,13 +204,6 @@ export async function POST(request: Request) {
   }
   if (!upstream.ok) {
     console.error(`[ingest] Supabase returned HTTP ${upstream.status} request_id=${requestId} device_id=${deviceId}`);
-    return jsonError(502, requestId);
-  }
-  let inserted: unknown;
-  try {
-    inserted = await upstream.json();
-  } catch {
-    console.error(`[ingest] Supabase returned invalid JSON request_id=${requestId} device_id=${deviceId}`);
     return jsonError(502, requestId);
   }
   if (!Array.isArray(inserted)) {
