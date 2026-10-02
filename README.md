@@ -313,9 +313,9 @@ locally. The example also documents the server-only ingestion variables.
 | Variable | Value |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://dfxxamgnrimwoumknuxa.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_…` (publishable/anon — safe client-side) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` (safe client-side) |
 | `SUPABASE_URL` | Same project URL, server-only ingestion setting |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase service credential; never browser-side |
+| `SUPABASE_SECRET_KEY` | `sb_secret_…`, server-only; never browser-side |
 | `INGEST_DEVICE_SECRETS_JSON` | Server-only device-ID → HMAC-secret map |
 
 The public dashboard variables and server-only ingestion variables are the

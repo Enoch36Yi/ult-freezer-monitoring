@@ -69,7 +69,8 @@ async function check() {
   };
   const envText = await readFile(path.join(projectRoot, 'web/.env.local'), 'utf8');
   const baseUrl = envValue(envText, 'NEXT_PUBLIC_SUPABASE_URL');
-  const key = envValue(envText, 'NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  const key = envValue(envText, 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ||
+    envValue(envText, 'NEXT_PUBLIC_SUPABASE_ANON_KEY');
   if (!baseUrl || !key || new URL(baseUrl).host !== expectedHost) {
     throw new Error('Local dashboard config is missing or points to the wrong Supabase project');
   }

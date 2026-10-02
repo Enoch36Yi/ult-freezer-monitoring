@@ -22,6 +22,7 @@ const reading = {
 function configure() {
   process.env.INGEST_DEVICE_SECRETS_JSON = JSON.stringify({ [DEVICE_ID]: SECRET });
   process.env.SUPABASE_URL = "https://db.example.test/";
+  delete process.env.SUPABASE_SECRET_KEY;
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-test-key";
 }
 
@@ -44,6 +45,7 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
   const originalEnv = {
     INGEST_DEVICE_SECRETS_JSON: process.env.INGEST_DEVICE_SECRETS_JSON,
     SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   };
   const upstreamCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];

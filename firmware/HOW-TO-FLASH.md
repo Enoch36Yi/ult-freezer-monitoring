@@ -46,7 +46,7 @@ npm install
 npx vercel --prod
 ```
 Set the two `NEXT_PUBLIC_*` dashboard variables in the Vercel project settings,
-plus server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
+plus server-only `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and
 `INGEST_DEVICE_SECRETS_JSON` for the authenticated ingestion route. Never mark
 the service key or device-secret map as `NEXT_PUBLIC_*`. Or just `npm run dev`
 and use `localhost:3000` while you work with the same local settings.

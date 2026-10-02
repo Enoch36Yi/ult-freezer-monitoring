@@ -1,5 +1,17 @@
 # ULT freezer project — cross-machine handoff
 
+# 2026-10-02 Supabase CLI and environment handoff — no external state changed
+
+- Added the Supabase CLI as the `web` dev dependency (`supabase` 2.119.0), so
+  contributors can run it with `cd web` then `npx supabase ...`.
+- Updated `web/.env.example`, deployment docs, dashboard/API code, and helper
+  scripts to use Supabase's current publishable/secret key names while keeping
+  legacy anon/service-role variable fallbacks for existing deployments.
+- No real credentials were written, no Supabase migration was applied, no
+  Vercel setting changed, and no hardware or device action was performed.
+- Validation passed: web unit tests (17), TypeScript, JavaScript syntax checks,
+  production build, and `git diff --check`.
+
 # 2026-09-30 repository-only reliability and release follow-up — no external state changed
 
 - Added focused local commits: `f4f2138` firmware upload-result classification

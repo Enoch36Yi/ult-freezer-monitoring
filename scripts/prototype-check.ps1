@@ -37,7 +37,8 @@ $envFile = Join-Path $projectRoot 'web/.env.local'
 if (-not (Test-Path -LiteralPath $envFile)) { throw 'web/.env.local is missing.' }
 $envText = Get-Content -Raw -LiteralPath $envFile
 $baseUrl = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_URL\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim().TrimEnd('/')
-$key = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_ANON_KEY\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim()
+$key = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim()
+if (-not $key) { $key = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_ANON_KEY\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim() }
 if (-not $baseUrl -or -not $key -or ([uri]$baseUrl).Host -ne $expectedHost) { throw 'Dashboard config is missing or points to the wrong Supabase project.' }
 $headers = @{ apikey = $key; Authorization = "Bearer $key" }
 

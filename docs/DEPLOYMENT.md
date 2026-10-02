@@ -80,13 +80,15 @@ cp web/.env.example web/.env.local
 ```
 
 Set these in the Vercel project settings. The first two are browser-visible;
-the last three are server-only:
+the last three are server-only. Supabase's current API-key names are
+publishable/secret; this repository still accepts the legacy anon/service-role
+variable names as fallbacks for an existing deployment.
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable-key>
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
 SUPABASE_URL=https://<project>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+SUPABASE_SECRET_KEY=<secret-key>
 INGEST_DEVICE_SECRETS_JSON={"prototype-22":"<32+ random characters>"}
 ```
 

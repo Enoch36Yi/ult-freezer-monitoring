@@ -160,8 +160,8 @@ export async function POST(request: Request) {
   }
 
   const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceRoleKey) return jsonError(503, requestId);
+  const serverKey = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serverKey) return jsonError(503, requestId);
 
   const table = deviceId === "prototype-22" ? "prototype_readings" : "readings";
   const normalizedRows = rows.map((row) => ({
@@ -177,8 +177,8 @@ export async function POST(request: Request) {
     upstream = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
       method: "POST",
       headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serverKey,
+        Authorization: `Bearer ${serverKey}`,
         "Content-Type": "application/json",
         // Representation lets us distinguish inserts from rows ignored by
         // the replay-safe unique constraint.

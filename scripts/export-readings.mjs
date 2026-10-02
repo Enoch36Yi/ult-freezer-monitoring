@@ -68,19 +68,21 @@ function parseEnv(text) {
 
 async function loadConfig() {
   const env = { ...process.env };
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  const hasPublicConfig = () => env.NEXT_PUBLIC_SUPABASE_URL &&
+    (env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  if (!hasPublicConfig()) {
     try {
       Object.assign(env, parseEnv(await readFile(path.join(root, 'web/.env.local'), 'utf8')));
     } catch {
       // The explicit environment is enough in CI or a deployment shell.
     }
   }
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    throw new Error('Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+  if (!hasPublicConfig()) {
+    throw new Error('Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.');
   }
   return {
     baseUrl: env.NEXT_PUBLIC_SUPABASE_URL.replace(/\/$/, ''),
-    key: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    key: env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   };
 }
 

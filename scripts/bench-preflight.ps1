@@ -48,7 +48,8 @@ if (-not $stage) {
 $envFile = Join-Path $projectRoot 'web\.env.local'
 $envText = if (Test-Path -LiteralPath $envFile) { Get-Content -Raw -LiteralPath $envFile } else { '' }
 $baseUrl = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_URL\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim().TrimEnd('/')
-$key = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_ANON_KEY\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim()
+$key = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim()
+if (-not $key) { $key = [regex]::Match($envText, '(?m)^NEXT_PUBLIC_SUPABASE_ANON_KEY\s*=\s*["'']?([^"''\r\n]+)').Groups[1].Value.Trim() }
 if (-not $baseUrl -or -not $key) { Say 'FAIL' 'web/.env.local is missing Supabase dashboard settings' }
 try {
     $response = Invoke-WebRequest -Uri "$baseUrl/rest/v1/prototype_readings?select=id&limit=1" -UseBasicParsing -TimeoutSec 20 `

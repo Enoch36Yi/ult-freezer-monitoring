@@ -13,8 +13,15 @@ function Get-EnvSetting([string]$Name) {
     if (-not $value) { throw "Missing dashboard setting: $Name" }
     return $value
 }
+function Get-FirstEnvSetting([string[]]$Names) {
+    foreach ($name in $Names) {
+        $value = [regex]::Match($envText, ('(?m)^' + [regex]::Escape($name) + '\s*=\s*["'']?([^"''\r\n]+)')).Groups[1].Value.Trim()
+        if ($value) { return $value }
+    }
+    throw ('Missing dashboard setting: ' + ($Names -join ' or '))
+}
 $baseUrl = (Get-EnvSetting 'NEXT_PUBLIC_SUPABASE_URL').TrimEnd('/')
-$key = Get-EnvSetting 'NEXT_PUBLIC_SUPABASE_ANON_KEY'
+$key = Get-FirstEnvSetting @('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY')
 $headers = @{ apikey = $key; Authorization = "Bearer $key" }
 $checks = [System.Collections.Generic.List[object]]::new()
 function Add-Check([string]$Name, [bool]$Passed, [string]$Detail) {
