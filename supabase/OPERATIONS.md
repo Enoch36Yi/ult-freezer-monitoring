@@ -46,13 +46,16 @@ contains row counts, UTC bounds, and a SHA-256 of the exported JSONL bytes.
 
 Prototype 22 is a bench instrument, not Freezer 22 and not part of the
 21-freezer study. Its rows live in `prototype_readings`, its history function is
-`prototype_readings_bucketed`, and its device identity is `prototype-22`.
+`prototype_readings_bucketed`, and its device identity is `prototype-22`. New
+in-house rows use `esp32_pt1000_max31865`; historical DS18B20 rows remain
+`esp32_ds18b20`.
 
 On a fresh project, run [prototype22.sql](prototype22.sql) after
 [schema.sql](schema.sql). On an existing project, create the prototype table
-before applying migrations 003–008; migrations 003–006 update its permissions,
-identity columns, clock provenance, and bounded history function, while 007–008
-add the liveness index and firmware metadata.
+before applying migrations 003–011; migrations 003–006 update its permissions,
+identity columns, clock provenance, and bounded history function, 007–010 add
+the liveness, firmware, payload, and latest-reading changes, and 011 permits
+the new PT1000/MAX31865 tier without relabeling old rows.
 
 The verifier reports `no_data` for Prototype 22 when the table is empty. That
 is an expected pre-bench state, not a pass for hardware commissioning. A valid

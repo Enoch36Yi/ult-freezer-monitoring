@@ -1,9 +1,9 @@
 # ULT Freezer Sensor Node Enclosure
 
-Parametric CadQuery enclosure for the ESP32-S3 Supermini + DS18B20 freezer
-sensor node. Two printed parts (base + lid) plus a fit coupon. 21 identical
+Parametric CadQuery enclosure for the ESP32-S3 Supermini + PT1000/MAX31865
+freezer sensor node. Two printed parts (base + lid) plus a fit coupon. 21 identical
 units, magnet-mounted on the **outside** side wall of a -80 °C ULT freezer.
-Only the DS18B20 probe goes inside the freezer, so the enclosure itself lives
+Only the PT1000 probe goes inside the freezer, so the enclosure itself lives
 at room temperature and needs no insulation.
 
 ```
@@ -44,7 +44,7 @@ Key derived numbers (printed by the script on every run):
 | Hold-down post length | 0.750 | 19.05 |
 | USB-C port height | 0.743 | 18.87 |
 | USB notch floor / depth | 0.683 / 0.480 | 17.35 / 12.19 |
-| DS18B20 cable hole | 0.257 | 6.53 |
+| PT1000 cable hole | 0.257 | 6.53 |
 
 **Antenna standoff.** With the magnets flush against the freezer steel, the
 ESP32 module's own PCB sits 0.743 in (18.9 mm) off the steel — floor + corner
@@ -66,7 +66,7 @@ appears anywhere in the design, so nothing detunes or shadows the antenna.
   commit to 21 full units:
   - a 10 mm magnet press-fits into the pocket and sits flush with the bottom;
   - an M3 self-tapping screw bites in the pilot hole without splitting the tower;
-  - the DS18B20 cable passes through the cable hole with a little slack;
+  - the PT1000 cable passes through the cable hole with a little slack;
   - a zip tie threads through both tie holes.
   Adjust `MAG_D`, `PILOT_D`, `CABLE_D`/`CABLE_CLEAR`, or `TIE_HOLE_D` and re-run
   before printing the real parts.
@@ -97,7 +97,7 @@ Rough consumption per unit: ~55 g PETG for base + lid.
    horizontally, then loop a zip tie through the two tie holes below the notch
    and cinch it around the cable *outside* the wall. All pull goes into the
    enclosure wall, not the connector.
-4. **DS18B20.** Thread the probe cable's **bare-wire end through the lid hole
+4. **PT1000.** Thread the probe cable's **bare-wire end through the lid hole
    before you solder it** to the board — the hole is far smaller than a
    terminated probe head. Then solder, and zip-tie the cable to the lid through
    the two tie holes flanking the cable hole, on the outside face.
@@ -125,12 +125,12 @@ inches. Nothing dimensional is hardcoded below it. Edit, save, re-run.
 **After measuring the real prototype, the two you will most likely change:**
 
 ```python
-CABLE_D          = 0.157   # <- measured DS18B20 cable OD, in inches
+CABLE_D          = 0.157   # <- measured PT1000 cable OD, in inches
 USB_NOTCH_OFFSET = 0.0     # <- shift the notch along the wall; 0 = centered,
                            #    + moves toward +Y, - toward -Y
 ```
 
-Measure the DS18B20 cable jacket with calipers at a few spots and use the
+Measure the PT1000 cable jacket with calipers at a few spots and use the
 largest reading. Put that in `CABLE_D`; the hole is always `CABLE_D +
 CABLE_CLEAR`, and the two tie holes automatically move apart so they keep
 `TIE_EDGE_MARGIN` of material from the bigger hole. Then:

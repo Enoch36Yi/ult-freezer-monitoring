@@ -14,7 +14,7 @@ than silently rewriting history.
 | `device_id` | Yes | Stable ingest identity, e.g. `freezer-07` or `prototype-22` |
 | `freezer_id` | Fleet only | Integer 1–21; blank for Prototype 22 |
 | `prototype_id` | Prototype only | `22`; blank for fleet nodes |
-| `sensor_tier` | Yes | Current instrument tier, normally `esp32_ds18b20` |
+| `sensor_tier` | Yes | Current instrument tier, normally `esp32_pt1000_max31865`; retain `esp32_ds18b20` only for historical rows |
 | `hardware_revision` | Yes | Board/enclosure revision or assembly identifier |
 | `board_mac` | Yes | Board MAC observed during commissioning |
 | `probe_id` | Yes | Physical probe serial/label, not a secret |

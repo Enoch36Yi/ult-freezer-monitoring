@@ -13,14 +13,10 @@ them on the day, and correct them if they are wrong.
 - Operator:
 - ESP32 board model and MAC: ESP32-S3 Supermini *(prefilled)*; MAC from `esptool read_mac`:
   (must not be retired `28:84:85:66:61:64`)
-- Waterproof probe manufacturer, model, lot/serial, and sensor ROM: HiLetgo
-  1 m waterproof DS18B20, Amazon B00M1PM55K, 5-pack *(prefilled, user report)*;
-  ROM from serial `[1wire-diag] ROM 28-...` or a found-probe run:
-- Probe datasheet and confirmed wire-to-pin mapping (do not rely on color):
-  listing says red VCC / yellow DATA / black GND *(unconfirmed; meter it)*
-- Probe rated temperature range and calibration/reference evidence: DS18B20
-  chip −55 to +125 °C *(datasheet)*; reference check:
-- Installed pull-up value (listing suggests 4.7 kΩ, bench plan 6.8 kΩ):
+- PT1000 probe manufacturer, model, lot/serial, and lead identity:
+- Probe datasheet and confirmed Lead A/B mapping (do not rely on color):
+- Probe rated temperature range and calibration/reference evidence:
+- MAX31865 board: Adafruit #3648; installed reference resistor: 4.3 kΩ
 - Firmware environment, build time, SHA-256, and upload time:
 - Test network type (2.4 GHz personal/hotspot, or other) and local-only SSID record:
 
@@ -33,21 +29,23 @@ voltage checks.
 | Check | Measured value / evidence | Pass / fail / pending |
 | --- | --- | --- |
 | Component and solder-side photos | | |
-| GPIO4 pad to probe DQ conductor/terminal continuity | | |
-| ESP32 3V3 pad to probe VDD conductor/terminal continuity | | |
-| ESP32 GND pad to probe GND conductor/terminal continuity | | |
-| Pull-up from GPIO4/DQ to 3V3 (nominal 6.8 kΩ) | | |
-| No unintended 3V3–GND short | | |
-| Powered 3V3 at ESP32 and probe | | |
-| Powered idle DQ at GPIO4 and probe | | |
+| GPIO4 / CS continuity to MAX31865 | | |
+| GPIO5 / MOSI continuity to MAX31865 SDI | | |
+| GPIO6 / MISO continuity to MAX31865 SDO | | |
+| GPIO7 / SCK continuity to MAX31865 CLK | | |
+| ESP32 3V3/GND to MAX31865 VIN/GND | | |
+| PT1000 Lead A/B to RTD+/RTD-, F+ bridge, F- bridge | | |
+| No unintended 3V3–GND or RTD wiring short | | |
+| Powered 3V3 at ESP32 and MAX31865 VIN/GND | | |
+| Powered SPI lines idle without unintended short | | |
 
 ## Live acceptance
 
 | Check | UTC time / evidence | Pass / fail / pending |
 | --- | --- | --- |
 | Observed ESP32 COM port and board identity | | |
-| Repeatable DS18B20 ROM detection over at least two sample cycles | | |
-| Two plausible measured temperatures, one minute apart | | |
+| MAX31865 SPI readiness and valid raw acquisition over at least two cycles | | |
+| Two plausible measured PT1000 temperatures, one minute apart | | |
 | Wi-Fi, NTP, and HTTP post result in serial log | | |
 | Matching genuine `prototype_readings` row (ID, time, temperature) | | |
 | Public Prototype 22 card and detail page checked in browser | | |
@@ -63,7 +61,7 @@ The full day sequence, with tested commands, is
 [BENCH_DAY_RUNBOOK.md](BENCH_DAY_RUNBOOK.md). In short:
 `scripts/prepare-bench-day.ps1` stages source to
 `%USERPROFILE%\FreezersFirmwareBuilds` (outside OneDrive), writes the bench
-network into that copy only, and builds both prototype images without
+network into that copy only, and builds the shared `prototype-22` image without
 uploading. `scripts/bench-preflight.ps1` confirms readiness read-only.
 
 The project folder is OneDrive-synced. Do not run `npm ci`,
@@ -76,17 +74,12 @@ credentials in chat, logs, screenshots, or this record. Campus sign-in,
 enterprise, and 5 GHz-only networks will not work. A successful build is not a
 flash, a sensor measurement, or evidence of upload.
 
-The user identified the exact purchased item as
-`https://www.amazon.com/dp/B00M1PM55K` and reports actual red, yellow, and
-black leads. That listing says red = VCC, yellow = DATA, black = GND. HiLetgo's
-separate product page lists conflicting color sets, so inspect the received
-probe/packaging and meter the completed connections before applying power. Do
-not infer waterproof-probe wiring from a generic DS18B20 TO-92 pin diagram.
-The Amazon listing suggests a 4.7 kΩ DATA-to-VCC pull-up; the current bench
-plan specifies 6.8 kΩ. Record the installed value and require repeatable ROM
-detection rather than assuming either value guarantees bus operation.
-The DS18B20 chip is rated only to -55 °C; a room-temperature transport test
-does not qualify this probe for a -70 to -80 °C freezer.
+The replacement hardware contract is the Adafruit MAX31865 #3648 with its
+installed 4.3 kΩ reference resistor and a two-wire PT1000. Confirm the actual
+probe datasheet, lead mapping, rated range, and reference thermometer before
+applying power. The ESP32 software-SPI pins are CS/MOSI/MISO/SCK = GPIO4/5/6/7.
+A room-temperature transport test does not qualify a probe for a -70 to -80 °C
+freezer; cold-range calibration remains a separate acceptance gate.
 
 On the computer connected to the new assembly, identify its Espressif COM
 port, then capture at least two one-minute cycles:

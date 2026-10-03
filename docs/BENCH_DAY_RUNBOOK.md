@@ -28,8 +28,8 @@ Python, PlatformIO 6.2.0, no Node, no `pwsh`) on 2026-09-29 unless marked
 1. **Build for the bench network.** Run `prepare-bench-day.ps1`. It prompts for
    the network name and password (hidden). It stages source to
    `%USERPROFILE%\FreezersFirmwareBuilds\<new folder>` (outside OneDrive),
-   builds `prototype-22` and `prototype-22-diag`, checks each image carries the
-   Prototype 22 identity, and prints hashes. Nothing is uploaded.
+   builds the shared `prototype-22` image, checks it carries the Prototype 22
+   identity, and prints its hash. Nothing is uploaded.
    - The network must be **2.4 GHz** with a plain password. iPhone hotspot:
      turn on *Maximize Compatibility*. Android: set the hotspot band to 2.4 GHz.
      No campus sign-in, eduroam, or enterprise login.
@@ -48,7 +48,8 @@ Python, PlatformIO 6.2.0, no Node, no `pwsh`) on 2026-09-29 unless marked
 ## 1. Physical gate (yours)
 
 Fill in the electrical table in the acceptance form: continuity with USB
-unplugged, then powered 3V3 and idle DQ with the ESP32 GND pad as reference.
+unplugged, then powered 3V3 at the ESP32/MAX31865 and quiet SPI lines with the
+ESP32 GND pad as reference.
 Leave failures visible. Continue only when satisfied.
 
 ## 2. Identify the board (read-only)
@@ -72,15 +73,14 @@ MAC. `28:84:85:66:61:64` is the **retired** board: stop if you see it.
 
 ## 3. Flash (needs your direct "elephant")
 
-Recommended first image: **`prototype-22-diag`**. Same identity and telemetry
-as `prototype-22`, plus a `[1wire-diag]` block at boot and after every failed
-probe scan, so if detection fails, the serial output says which side is wrong
-without another flash. Once the probe is found, it stays quiet.
+Use **`prototype-22`**. The shared image includes MAX31865 raw-acquisition,
+SPI-response, and fault diagnostics for both the fleet and Prototype 22; there
+is no prototype-only sensor diagnostic fork.
 
 Claude runs, from the staged folder printed by the prepare script:
 
 ```powershell
-python -m platformio run -e prototype-22-diag -t upload --upload-port COMx
+python -m platformio run -e prototype-22 -t upload --upload-port COMx
 ```
 
 No erase, no filesystem upload. Record the image hash. If the upload cannot
@@ -105,19 +105,24 @@ Opening the port can restart the board; note it.
 | `[provision] prototype 22, connecting to compiled WiFi` then `[provision] ip ...` | joined the network | — |
 | `[provision] no AP yet; will keep retrying` | wrong name/password, 5 GHz, or hotspot asleep | wake/fix the hotspot first; otherwise rebuild (step 0) and re-flash (new "elephant") |
 | `[ntp] 2026-...Z` | clock valid | — |
-| `[ntp] sync failed` | network has no internet | check hotspot data; rows would get server time |
-| `[sensor] DS18B20 found on GPIO4` | probe enumerated | expect `[reading] {...}` |
-| `[sensor] no DS18B20 ...` + `[1wire-diag] VERDICT: ...` | not detected | act on the verdict physically; no re-flash needed |
+| `[ntp] sync failed` | network time is not available | check hotspot data; readings remain paused until NTP succeeds |
+| `[sensor] MAX31865 ready: PT1000 2-wire...` | adapter configured; acquisition follows each sample | expect `[reading] {...}` |
+| `[sensor] MAX31865 SPI/acquisition invalid` | SPI wiring/adapter response failed | inspect 3V3/GND and CS/MOSI/MISO/SCK; no value is posted |
+| `[sensor] MAX31865 fault` | RTD open/short/reference/threshold fault | inspect RTD+/RTD-/F+/F- wiring; no value is posted |
+| `[sensor] invalid PT1000 reading` | raw-to-temperature result is invalid/out of RTD range | stop and review probe, adapter, and calibration |
 | `[reading] {"prototype_id":22,...}` then `[reading] posted` | measured and stored | step 6 |
 | `[reading] {...}` then `[queue] buffered ...` | measured, not sent | not database proof; it flushes when the network returns |
 | `[http] POST failed, status 400/401/403/404` | server refused | 400 payload/constraint, 401/403 key or RLS, 404 table path |
 | `[http] POST failed, status -1` (or other negative) | no connection / TLS | network |
-| `[sensor] bad reading (-127.00 C)` | probe dropped mid-read | intermittent wiring |
+| `[sensor] invalid PT1000 reading` | raw conversion is outside the accepted RTD range | inspect probe, adapter, and calibration |
 | a flood of LittleFS errors naming `/prototype22-queue.jsonl` | the old log-flood bug | should **not** appear with this build (fixed 2026-09-25); if it does, note it |
 | `[queue] recovered queue from temp file ...` | new power-loss recovery ran | normal after a mid-flush power cut |
 
-A room-temperature reading around 18–30 °C is plausible. Exactly `85.000` is the
-DS18B20 power-on default: record it, but it is not a measurement.
+A room-temperature reading around 18–30 °C is plausible, but plausibility is
+not cold-range calibration. No sensor fault line, raw-acquisition error, or
+temperature JSON without the MAX31865-valid path is a measurement. A genuine
+reading must pass raw acquisition, MAX31865 fault, finite-temperature, NTP, and
+authenticated-upload checks.
 
 ## 6. Verify end to end (read-only)
 
@@ -141,19 +146,21 @@ Then open <https://ult-freezres.vercel.app> (bottom card) and
 match the row. `verify.ps1` should still list freezer 1 as `offline` (old test
 rows) and 2–21 as `no_data`, meaning the prototype did not touch the fleet table.
 
-**Acceptance:** ROM found on at least two consecutive cycles, two plausible
-readings about a minute apart, `matched`, and the browser agrees.
+**Acceptance:** MAX31865 ready plus valid raw acquisition on at least two
+consecutive cycles, two plausible measured PT1000 readings about a minute apart,
+`matched`, and the browser agrees.
 
 ## 7. Record
 
 Ask Claude to append to `updates.md`: MAC, COM port, image and hash, network
-*type* (not its name), probe ROM, capture/report paths, row IDs, browser check,
-and any deviations. Then tick the acceptance form and `TODO.md`.
+*type* (not its name), probe identity/lead mapping, capture/report paths, row
+IDs, browser check, and any deviations. Then tick the acceptance form and
+`TODO.md`.
 
 ## Out of scope for this page
 
-- **Probe range.** The DS18B20 is rated only to −55 °C. Passing this bench
-  test qualifies the chain (sensor to Wi-Fi to database to dashboard), not the
-  probe at −70 to −80 °C. See `TODO.md` item S1.
+- **Probe range.** Passing this bench test qualifies the chain (sensor to Wi-Fi
+  to database to dashboard), not the PT1000 assembly at −70 to −80 °C. Cold
+  calibration and installation qualification remain separate acceptance gates.
 - **The two Supermini hardware quirks** are noted in `firmware/HOW-TO-FLASH.md`
   (charge-only cables, BOOT button).

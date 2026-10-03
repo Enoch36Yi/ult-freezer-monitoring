@@ -7,7 +7,8 @@
 > end-to-end Prototype 22 temperature reading has not yet been verified.
 
 Temperature monitoring for 21 ultra-low-temperature freezers. Each freezer has an
-ESP32-S3 node with a DS18B20 probe that posts a reading over WiFi every 1
+ESP32-S3 node with a two-wire PT1000 read through an Adafruit MAX31865 #3648
+that posts a reading over WiFi every 1
 minute (freezers 1–6) or 15 minutes (freezers 7–21) to Supabase. A separate
 bench instrument, Prototype 22, reports every minute without becoming a 22nd
 study freezer. A Next.js dashboard shows all 21 freezer nodes and the separate
@@ -38,36 +39,38 @@ or serial/wired data paths — WiFi and HTTPS are the only device transport.
 
 ## 1. Hardware & wiring
 
-One node = ESP32-S3 Supermini + one waterproof DS18B20 probe (soldered-pin
-version) on a 1-Wire bus.
+One node = ESP32-S3 Supermini + one two-wire PT1000 probe + Adafruit MAX31865
+#3648. The same shared firmware serves freezers 1–21 and Prototype 22.
 
 ```
-   ESP32-S3 Supermini                          DS18B20 (waterproof probe)
-  ┌───────────────────┐                       ┌──────────────────────────┐
-  │             3V3 ●─┬──────────────┬────────┤ VDD  (red)               │
-  │                   │              │        │                          │
-  │                   │             ┌┴┐       │                          │
-  │                   │     6.8 kΩ  │ │       │                          │
-  │                   │             └┬┘       │                          │
-  │          GPIO4  ●─┼──────────────┴────────┤ DQ   (yellow / white)    │
-  │                   │                       │                          │
-  │             GND ●─┴──────────────┬────────┤ GND  (black)             │
-  └───────────────────┘              │        └──────────────────────────┘
-                                     │
-   100 µF across 3V3 ↔ GND ──────────┤   0.1 µF ceramic across the
-   (at the board)                     │   DS18B20's VDD ↔ GND (at the probe)
+ESP32-S3                 MAX31865 #3648
+3V3  ------------------- VIN
+GND  ------------------- GND
+GPIO4 ------------------ CS
+GPIO5 ------------------ SDI / MOSI
+GPIO6 ------------------ SDO / MISO
+GPIO7 ------------------ CLK / SCK
+
+Two-wire PT1000:
+  Lead A --------------- RTD+
+  Lead B --------------- RTD-
+  Bridge F+ to RTD+
+  Bridge F- to RTD-
+
+RDY and 3Vo are unused. Remove the former DS18B20 and its pull-up resistor.
+The #3648's installed 4.3 kΩ reference resistor is retained.
 ```
 
 | Item | Value | Why |
 |---|---|---|
-| DS18B20 DQ | **GPIO4** | Not a strapping pin (0, 3, 45, 46), not input-only |
-| Pull-up | **one 6.8 kΩ** between DQ and 3V3 | One per bus — not one per sensor, even though each node has only one probe |
-| Bulk cap | **100 µF** across the ESP32's 3V3 / GND | Brownout mitigation during WiFi TX current spikes |
-| Decoupling cap | **0.1 µF ceramic** across the DS18B20's VDD / GND | Noise rejection near compressor EMI; place it at the probe end |
+| MAX31865 SPI | **CS 4, MOSI 5, MISO 6, SCK 7** | Software SPI; these pins are not used by another current firmware peripheral |
+| RTD | **Two-wire PT1000** | Nominal 1000 Ω; supports the required negative-temperature range |
+| MAX31865 reference | **4300 Ω on #3648** | Already correct; do not replace it |
+| MAX31865 mode | **`MAX31865_2WIRE`** | Matches the proposed bridge wiring |
 | Power | **USB 5 V** into the board; the board regulates to 3.3 V | |
-| Sensor supply | **3.3 V — not 5 V** | The DQ line is referenced to the ESP32's 3.3 V logic |
+| Board supply | **3.3 V** from ESP32 to MAX31865 VIN | Keep the adapter within the board's logic/supply contract |
 
-The firmware assumes exactly this wiring. `ONEWIRE_PIN` lives in
+The firmware assumes exactly this wiring. The pin and RTD constants live in
 [firmware/include/config.h](firmware/include/config.h) if a node ever has to
 differ.
 
@@ -85,9 +88,12 @@ supabase/migrations/005_clock_provenance.sql    timestamp provenance
 supabase/migrations/006_bound_history_rpc.sql   bounded history RPC
 supabase/migrations/007_latest_received_index.sql liveness query index
 supabase/migrations/008_firmware_version.sql    firmware observability
+supabase/migrations/009_payload_version.sql     payload contract
+supabase/migrations/010_latest_readings_rpc.sql batched latest lookup
+supabase/migrations/011_pt1000_max31865_sensor_tier.sql new in-house sensor tier
 ```
 
-> **002 is not optional.** Three instruments (ESP32/DS18B20, TRAXX, iMonnit)
+> **002 is not optional.** Three instruments (ESP32/PT1000+MAX31865, TRAXX, iMonnit)
 > write into one table. Without the tier filter, `readings_bucketed()` averages
 > across instruments and returns a line that corresponds to no real
 > measurement — silently. Run it before trusting any chart.
@@ -116,7 +122,7 @@ create table public.readings (
   device_id text not null,
   firmware_version text,
   observation_id text not null,
-  sensor_tier text not null default 'esp32_ds18b20',
+  sensor_tier text not null default 'esp32_pt1000_max31865',
   temp_c numeric not null,
   rssi integer,
   reset_reason text,
@@ -145,7 +151,7 @@ create or replace function readings_bucketed(
   p_start timestamptz,
   p_end timestamptz,
   p_bucket_seconds integer,
-  p_sensor_tier text default 'esp32_ds18b20'
+  p_sensor_tier text default 'esp32_pt1000_max31865'
 )
 returns table (
   bucket_time timestamptz,
@@ -185,8 +191,10 @@ Notes on the columns:
 
 - **No update or delete policy for anon**, by design — readings are append-only
   from the devices and from the dashboard alike.
-- **`sensor_tier`** identifies the instrument: `esp32_ds18b20`, `traxx`,
-  `imonnit`. This is a comparison study, so **every query must constrain it** —
+- **`sensor_tier`** identifies the instrument: new in-house readings use
+  `esp32_pt1000_max31865`; historical DS18B20 rows retain `esp32_ds18b20`;
+  commercial tiers are `traxx` and `imonnit`. This is a comparison study, so
+  **every query must constrain it** —
   aggregating across tiers averages probes with different placements and
   offsets. The dashboard has a sensor selector and filters on exactly one tier.
   Only the ESP32 tier has firmware here; ingestion for the other two is not

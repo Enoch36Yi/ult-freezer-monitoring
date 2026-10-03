@@ -45,7 +45,9 @@ Do not start the 28-day baseline simply because three or 21 ESP32 boxes are onli
 - [x] The web application has been deployed to the existing Vercel project according to the later handoff record; older README text saying it is undeployed is stale.
 - [x] Prototype 22 SQL was applied and its isolated table/RPC exist according to the handoff record.
 - [ ] No genuine Prototype 22 temperature row has been verified.
-- [ ] The replacement Prototype 22 hardware has repeatedly failed to enumerate its DS18B20.
+- [x] The replacement sensor path was changed repository-wide to a two-wire PT1000
+  through MAX31865 #3648; the earlier DS18B20 enumeration failures remain
+  historical evidence, not a current firmware acceptance result.
 - [ ] No production fleet node has yet passed the full sensor → timestamp → HTTPS → database → dashboard acceptance chain in the current evidence.
 - [ ] The authoritative, signed 21-freezer inventory and device mapping are still open.
 - [ ] TRAXX/KLATU has not been purchased/commissioned in the available record.
@@ -57,14 +59,18 @@ Do not start the 28-day baseline simply because three or 21 ESP32 boxes are onli
 
 ### 1. Sensor suitability at ULT temperatures — critical scientific risk
 
-The usual DS18B20 specified range ends at approximately **−55 °C**, while these freezers operate near −70 to −80 °C. A waterproof assembly containing a DS18B20 does not become valid at −80 °C merely because it returns a number.
+The shared path now uses a two-wire PT1000 through an Adafruit MAX31865 #3648.
+The firmware supports negative temperatures and rejects MAX31865 faults and
+invalid RTD conversions, but that does not qualify the purchased probe/cable
+assembly at −70 to −80 °C.
 
 - [ ] Identify the exact sensor/probe manufacturer, model, sensing element, cable, and datasheet.
 - [ ] Confirm the purchased part's specified operating range.
 - [ ] Compare it at the intended ULT range against a traceable reference.
 - [ ] Preserve raw calibration/verification data and stabilization duration.
 - [ ] If it cannot be validated at ULT temperatures, obtain a suitable sensor or sign a formal limitation restricting the in-house system to exploratory/repeatability claims.
-- [ ] Update `sensor_tier`, firmware conversion logic, wiring, BOM, and methodology if the final element is not actually DS18B20.
+- [x] Update `sensor_tier`, firmware conversion logic, wiring, BOM, and methodology
+  for the PT1000/MAX31865 conversion. Cold-range qualification remains open.
 
 **Gate:** do not manufacture 21 identical nodes around an unverified sensing element.
 
@@ -125,11 +131,15 @@ These should be three **production-representative fleet nodes**, not three copie
 
 ### A1. Freeze the pilot hardware revision
 
-- [ ] Resolve the current Prototype 22 1-Wire fault using read-only serial/electrical diagnosis first.
+- [ ] Complete the PT1000/MAX31865 electrical and cold-range qualification using
+  read-only evidence first.
 - [ ] Do not flash until a new direct `elephant` instruction is received.
 - [ ] Confirm exact ESP32-S3 board variant and flash size.
-- [ ] Confirm GPIO4, external power mode, ground, VDD, DQ, pull-up value, cable length, and connector pinout.
-- [ ] Confirm the pull-up value works across the selected cable and ULT environment; the current 6.8 kΩ choice requires validation.
+- [ ] Confirm GPIO4/CS, GPIO5/MOSI, GPIO6/MISO, GPIO7/SCK, 3V3/GND, RTD+/RTD-,
+  F+/F- bridges, cable length, and connector pinout; confirm the old DS18B20
+  and pull-up are removed.
+- [ ] Confirm the installed MAX31865 #3648 reference is 4.3 kΩ and the old
+  DS18B20 pull-up is removed; do not add a replacement pull-up.
 - [ ] Select a listed, appropriately rated USB supply and cable.
 - [ ] Confirm the MCU, supply, and mains connection remain outside the freezer.
 - [ ] Confirm probe routing uses an approved access route and never pinches the door gasket.
@@ -149,7 +159,10 @@ These should be three **production-representative fleet nodes**, not three copie
 - [ ] Verify reset-reason handling survives queueing and retransmission.
 - [ ] Verify behavior when NTP is unavailable at boot and later recovers.
 - [ ] Verify duplicate/replayed buffered observations cannot create duplicate study records.
-- [ ] Verify probe disconnect, 85 °C power-on default, −127 °C sentinel, brownout, Wi-Fi loss, API 4xx/5xx, and full filesystem behavior.
+- [x] Add and pass host tests for negative PT1000 conversion, invalid raw
+  acquisition, open/short faults, and all MAX31865 fault bits.
+- [ ] Verify physical probe disconnect/fault behavior, brownout, Wi-Fi loss,
+  API 4xx/5xx, and full filesystem behavior on hardware.
 - [ ] Verify OTA authentication policy and rollback/recovery procedure.
 - [ ] Keep fleet and Prototype 22 credentials/endpoints isolated in compiled artifacts.
 
@@ -158,8 +171,9 @@ These should be three **production-representative fleet nodes**, not three copie
 For each node:
 
 - [ ] Inspect solder joints and continuity unpowered.
-- [ ] Verify 3.3 V rail and DQ idle behavior powered.
-- [ ] Enumerate and record the probe ROM/serial number.
+- [ ] Verify 3.3 V rail and quiet SPI lines powered.
+- [ ] Identify and record the PT1000 probe serial/model, lead mapping, and rated
+  range.
 - [ ] Record ESP32 MAC, USB serial/COM port, enclosure ID, probe ID, USB supply ID, and intended freezer ID.
 - [ ] Load the approved fleet image only after fresh flash authorization.
 - [ ] Provision Wi-Fi and the assigned freezer ID.
@@ -205,9 +219,10 @@ Each of the three nodes must independently satisfy every item:
 For all 21 production nodes:
 
 - [ ] Record every component/device serial and MAC.
-- [ ] Inspect polarity, pinout, solder, pull-up, capacitors, strain relief, and enclosure fit.
+- [ ] Inspect polarity, pinout, solder, MAX31865 reference, capacitors, strain
+  relief, and enclosure fit.
 - [ ] Run continuity and powered voltage checks.
-- [ ] Enumerate the real probe.
+- [ ] Verify the real PT1000 and MAX31865 fault-free acquisition.
 - [ ] Burn in each node before field installation.
 - [ ] Verify identity and cadence against the registry.
 - [ ] Verify at least one real end-to-end row and dashboard card.
@@ -250,7 +265,8 @@ For all 21 production nodes:
 
 - [ ] Align observations by source measurement time without manufacturing interpolated values.
 - [ ] Preserve each source separately; never average instruments into one synthetic line.
-- [ ] Verify the dashboard independently displays `esp32_ds18b20`, `traxx`, and `imonnit` where real data exist.
+- [ ] Verify the dashboard independently displays `esp32_pt1000_max31865`,
+  historical `esp32_ds18b20`, `traxx`, and `imonnit` where real data exist.
 - [ ] Produce reconciliation reports with expected, received, duplicate, rejected, late, and missing records.
 - [ ] Define uptime, latency, alarm fidelity, installation effort, operating effort, and cost calculations before reviewing outcomes.
 

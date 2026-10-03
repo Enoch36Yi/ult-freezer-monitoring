@@ -23,15 +23,17 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
 - [ ] Electrical diagnosis and repair (owner: user)
 - [ ] Identify board, COM port, MAC; record in the acceptance form
 - [ ] Flash on a fresh direct "elephant"
-- [ ] Serial capture, at least 2 cycles; probe ROM found
+- [ ] Serial capture, at least 2 cycles; MAX31865 ready and valid PT1000
+      acquisition observed
 - [ ] Genuine `prototype_readings` row matches serial; card and `/prototype/22` agree
 - [ ] Log results in `updates.md`
 - [ ] Rotate the Wi-Fi password exposed 2026-09-26
 
 ## Stop-ship (before building more hardware)
 
-- [ ] S1 ULT probe: DS18B20 is rated to -55 C, freezers run -70 to -80 C. Pick a
-      rated probe + reference calibration, or sign a limitation (B09)
+- [ ] S1 ULT probe: qualify the two-wire PT1000 + MAX31865 #3648 chain at
+      -70 to -80 C with a reference calibration, including the actual probe,
+      cable, bridge wiring, and installation (B09)
 - [ ] S2 Energy metering: choose subset vs all 21, meter model, Facilities approval (B11)
 - [ ] S3 Signed 21-freezer inventory, device registry, two-person label check (B01, B03)
 - [ ] S4 Data integrity: apply the ordered migration ledger and complete a
@@ -54,10 +56,12 @@ Runbook: [docs/BENCH_DAY_RUNBOOK.md](docs/BENCH_DAY_RUNBOOK.md) · Form:
       validate a canary OTA, 30-second health confirmation, and recovery from a
       deliberately failed first boot before any fleet rollout. See
       `docs/OTA_RUNBOOK.md`.
-- [ ] Install a host C++ compiler (or run on the desktop) so `pio test -e native`
-      can run again; Node LTS if the JS tests are to run on this laptop
+- [x] Native PlatformIO tests run in the temporary verification environment:
+      18/18 passed on 2026-10-02; keep using a supported PlatformIO environment
+      for future builds
 - [ ] Final BOM, USB supply, enclosure fit test (CAD in `cad_enclosure/`), probe routing
-- [ ] Build 3 nodes; each: ROM enumerates over 10 restarts, reference comparison,
+- [ ] Build 3 nodes; each: MAX31865 acquisition is stable over 10 restarts,
+      reference comparison,
       serial -> Supabase -> dashboard match, 24-72 h run, induced Wi-Fi outage and
       power cut, no duplicates, correct Live/Stale/Offline
 - [ ] Freeze hardware + firmware hash before scaling

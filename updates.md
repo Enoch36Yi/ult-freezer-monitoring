@@ -1,5 +1,56 @@
 # ULT freezer project — cross-machine handoff
 
+# 2026-10-02 shared PT1000/MAX31865 firmware conversion — repository only
+
+- Reviewed the latest fetched GitHub `origin/main` at commit `aea763c` before
+  editing. The shared firmware now uses an Adafruit MAX31865 #3648 with a
+  two-wire PT1000 for Freezers 1–21 and Prototype 22; there is no
+  prototype-only sensor fork.
+- The wiring contract is 3V3/GND to VIN/GND, software SPI CS/MOSI/MISO/SCK on
+  GPIO4/5/6/7, PT1000 leads on RTD+/RTD-, and F+ bridged to RTD+ / F- bridged
+  to RTD-. RDY and 3Vo are unused. The #3648's installed 4.3 kΩ reference is
+  retained. The old DS18B20 and pull-up are hardware-conversion steps, not
+  software actions performed here.
+- Replaced OneWire/DallasTemperature acquisition and the prototype-only
+  diagnostic image with the shared `Adafruit MAX31865 library@1.6.2` path in
+  `firmware/platformio.ini`. The software-SPI constructor is `(4, 5, 6, 7)`,
+  two-wire mode is explicit, the 50 Hz rejection setting is explicit, and the
+  firmware version is `0.3.0`.
+- Added hardware-independent RTD validation tests for negative-temperature
+  conversion, invalid raw acquisition, open/short and all MAX31865 fault bits.
+  Faulted, non-finite, out-of-range, zero, and all-ones acquisitions return
+  without creating or uploading a reading. The existing provisioning,
+  identity, Wi-Fi, NTP, LittleFS buffering, retry, upload, and rollback/OTA
+  paths were left in the shared image. Sampling remains 60 seconds for 1–6,
+  900 seconds for 7–21, and 60 seconds for Prototype 22.
+- Added migration `011_pt1000_max31865_sensor_tier.sql`. New rows use
+  `esp32_pt1000_max31865`; existing `esp32_ds18b20` observations are not
+  relabeled or rewritten. The ingest route accepts legacy queued DS18B20 rows
+  unchanged while accepting the PT1000 operating range, and dashboard tier
+  labels/selectors keep historical DS18B20 data separate. Apply migration 011
+  before deploying the matching API/firmware; it was not applied here.
+- Verification completed: web unit tests (19), TypeScript typecheck,
+  production build, JavaScript syntax checks, `git diff --check`, all 18
+  native PlatformIO test cases, and ESP32 builds for `esp32-s3` and
+  `prototype-22`. The fleet image used 969,033 bytes of its 1,310,720-byte
+  app partition (73.9%) and the Prototype 22 image used 967,953 bytes
+  (73.8%); both used 48,736 bytes of the 327,680-byte RAM budget (14.9%).
+  Prototype 22 was compiled once with a temporary placeholder-only ignored
+  Wi-Fi header because its real local header is intentionally absent; that
+  placeholder was removed immediately after the build. No real credential was
+  used or retained. No flash, OTA, deploy, live Supabase change, hardware
+  installation, or cold-range calibration was performed.
+- Fresh visual QA covered the home and detail pages at 1440×900, 1280×720,
+  and 390×844. Two independent reviewers passed the final captures with no
+  blocking layout, overflow, labeling, error-state, or touch-target findings.
+  The local screenshots intentionally show the pre-migration API outage; the
+  UI remains usable and the migration is documented above.
+- Remaining acceptance work: install and electrically inspect the proposed
+  wiring, confirm the actual PT1000 probe/cable identity and range, verify
+  repeatable SPI/raw/fault-free acquisition, then perform ambient and ULT
+  cold-reference calibration. Those results must be recorded before the 21
+  freezers enter the study baseline.
+
 # 2026-10-02 Supabase CLI and environment handoff — no external state changed
 
 - Added the Supabase CLI as the `web` dev dependency (`supabase` 2.119.0), so
@@ -41,7 +92,7 @@
 - No live Supabase/Vercel change, device flash, OTA upload, credential change,
   or hardware action was performed.
 
-Last updated: 2026-09-30. External state still requires fresh verification.
+Last updated: 2026-10-02. External state still requires fresh verification.
 
 ## 2026-09-29 repository sweep follow-up — pushed, no external state changed
 

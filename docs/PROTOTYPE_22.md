@@ -3,7 +3,8 @@
 ## Boundary
 
 Prototype 22 is a bench instrument, **not Freezer 22** and not a member of the
-21-freezer study cohort. It uses an ESP32-S3 Supermini and one DS18B20 on GPIO4,
+21-freezer study cohort. It uses the shared ESP32-S3 firmware and one two-wire
+PT1000 through an Adafruit MAX31865 #3648 on software SPI GPIO4/5/6/7,
 powered by USB. Its readings belong only in `public.prototype_readings`; never
 backfill them into `public.readings` or include them in fleet counts, freezer
 comparisons, or TRAXX/iMonnit tier comparisons. The fleet remains 21 nodes:
@@ -22,7 +23,8 @@ IDs 1–6 at 1 minute and IDs 7–21 at 15 minutes.
    device accordingly; rotate the Wi-Fi password if the binary is shared.
    The example header shows the required names without credentials.
 3. `supabase/prototype22.sql` defines a separate append-only table,
-   DS18B20-only ID22 constraints, read-only public access, and a tier-filtered
+   PT1000/MAX31865 ID22 constraints while preserving historical DS18B20 rows,
+   read-only public access, and a tier-filtered
    history RPC. The authenticated ingestion route performs device writes;
    migration 003 removes the historical anon INSERT grant. It does not change
    or erase `public.readings`. Do not insert synthetic readings in production
@@ -37,22 +39,24 @@ IDs 1–6 at 1 minute and IDs 7–21 at 15 minutes.
 Day-of sequence: [BENCH_DAY_RUNBOOK.md](BENCH_DAY_RUNBOOK.md).
 
 Use the per-assembly [acceptance record](PROTOTYPE_22_ACCEPTANCE.md) for the
-new waterproof-probe build. Verify that probe's own pinout and rated range;
-the TO-92 lead order below describes the earlier bare sensor only.
+new PT1000-probe build. Verify the probe's own lead identity and rated range;
+do not infer lead polarity or bridge wiring from color alone.
 
 Record date/time, operator, board serial/MAC, probe serial (if available),
-firmware build timestamp/hash, SQL application time, and the physical wiring
-photographs. With USB power removed, solder the DS18B20 and verify continuity:
-with the flat face toward you, left is GND, middle is DQ, right is 3V3. Check
-the one 6.8 kΩ pull-up between DQ and 3V3 and no short between power rails.
+firmware build timestamp/hash, SQL application time, and physical wiring
+photographs. With USB power removed, verify continuity for 3V3/GND and each
+software-SPI line to the MAX31865. Verify PT1000 Lead A/B, the RTD+/RTD- pair,
+both F+ / F- bridges, and no short between supply rails. Confirm the #3648
+reference resistor is the installed 4.3 kΩ part; do not replace it.
 Do not infer correct connections from the component-side photo alone.
 
 After the probe is installed, reconnect the board and identify its serial
 port. Flash **only** `-e prototype-22`; do not erase NVS or LittleFS. Watch
-serial output for probe detection, Wi-Fi connection, NTP synchronization,
-temperature measurement, and an HTTP success. Check that the resulting
-`prototype_readings` row has `prototype_id=22`, `sensor_tier=esp32_ds18b20`,
-a plausible *measured* temperature, correct UTC `recorded_at`, and
+serial output for MAX31865 readiness, raw/fault diagnostics, Wi-Fi connection,
+NTP synchronization, temperature measurement, and an HTTP success. Check that
+the resulting `prototype_readings` row has `prototype_id=22`,
+`sensor_tier=esp32_pt1000_max31865`, a plausible *measured* temperature,
+correct UTC `recorded_at`, and
 `received_at`. Then check that the bottom card and `/prototype/22` agree.
 Confirm `public.readings` still contains only IDs 1–21 and no new Freezer 1
 row from this board. Record any Wi-Fi outage and queue replay separately;

@@ -54,6 +54,7 @@ supabase/migrations/007_latest_received_index.sql
 supabase/migrations/008_firmware_version.sql
 supabase/migrations/009_payload_version.sql
 supabase/migrations/010_latest_readings_rpc.sql
+supabase/migrations/011_pt1000_max31865_sensor_tier.sql
 ```
 
 If Prototype 22 has not been created yet, run `supabase/prototype22.sql` first.
@@ -192,8 +193,11 @@ anonymous writes. Then, one node at a time:
 Record those facts in the private [device registry](DEVICE_REGISTRY.md),
 including an independent second checker before marking the row `active`.
 
-If the sensor is absent or NTP is invalid, the node must not create a
-temperature observation. It may retain valid queued rows and retry later.
+If the sensor is absent, the MAX31865 reports an SPI/raw/fault error, or NTP is
+invalid, the node must not create a temperature observation. It may retain
+valid queued rows and retry later. New rows use
+`sensor_tier=esp32_pt1000_max31865`; historical DS18B20 rows remain
+`esp32_ds18b20`.
 
 ## 7. Prototype 22
 

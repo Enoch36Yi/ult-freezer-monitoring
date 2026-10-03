@@ -2,9 +2,9 @@
 """
 ULT freezer sensor node enclosure - parametric CadQuery model.
 
-Two-part PETG enclosure (base + lid) for an ESP32-S3 Supermini + DS18B20 node
+Two-part PETG enclosure (base + lid) for an ESP32-S3 Supermini + PT1000/MAX31865 node
 soldered to a 3.5" x 2.05" perma-proto board.  Magnet-mounted on the OUTSIDE
-side wall of a -80 C freezer; only the DS18B20 probe goes inside the freezer,
+side wall of a -80 C freezer; only the PT1000 probe goes inside the freezer,
 so the enclosure itself needs no insulation.
 
     python enclosure.py
@@ -53,11 +53,11 @@ HEADROOM = 0.75     # clearance above PCB top surface (ESP32 on headers + cap)
 BLOCK   = 0.50      # square footprint, one in each inside corner of the cavity
 BLOCK_H = 0.25      # height above floor, PCB rests on top
 
-# ---- DS18B20 cable (through the lid) ---------------------------------------
+# ---- PT1000 cable (through the lid) ----------------------------------------
 CABLE_D     = 0.157  # 4 mm cable - put the MEASURED value here
 CABLE_CLEAR = 0.10   # added to diameter
-DS_HOLE_X   = -1.20  # lid position, toward the end opposite the USB notch
-DS_HOLE_Y   = 0.00
+RTD_HOLE_X  = -1.20  # lid position, toward the end opposite the USB notch
+RTD_HOLE_Y  = 0.00
 
 # ---- USB power cable notch (U-notch from top edge of a short wall) ---------
 USB_WALL         = "short_end_A"  # "short_end_A" = +X end, "short_end_B" = -X
@@ -155,8 +155,8 @@ lid_z0 = shell_h                                  # lid underside
 lid_z1 = shell_h + lid_t                          # lid top face
 
 # Cable hole
-ds_hole_d = mm(CABLE_D) + mm(CABLE_CLEAR)
-ds_x, ds_y = mm(DS_HOLE_X), mm(DS_HOLE_Y)
+rtd_hole_d = mm(CABLE_D) + mm(CABLE_CLEAR)
+rtd_x, rtd_y = mm(RTD_HOLE_X), mm(RTD_HOLE_Y)
 
 # USB notch
 usb_sign = 1.0 if USB_WALL == "short_end_A" else -1.0
@@ -192,7 +192,7 @@ tie_edge_margin = mm(TIE_EDGE_MARGIN)
 tie_below_notch = mm(TIE_BELOW_NOTCH)
 
 # Tie pairs straddle a feature, so the span is driven by that feature's width.
-lid_tie_span = max(tie_gap_min, ds_hole_d + tie_hole_d + 2 * tie_edge_margin)
+lid_tie_span = max(tie_gap_min, rtd_hole_d + tie_hole_d + 2 * tie_edge_margin)
 usb_tie_span = max(tie_gap_min, usb_notch_w + tie_hole_d + 2 * tie_edge_margin)
 usb_tie_z = notch_bot_z - (tie_hole_d / 2 + tie_below_notch)
 
@@ -365,11 +365,11 @@ def build_lid():
         lid = lid.cut(_cyl(cbore_d / 2, cbore_depth + eps,
                            (tx, ty, lid_z1 - cbore_depth)))
 
-    # DS18B20 cable hole + its strain-relief tie pair.
-    lid = lid.cut(_cyl(ds_hole_d / 2, lid_t + 2 * eps, (ds_x, ds_y, lid_z0 - eps)))
+    # PT1000 cable hole + its strain-relief tie pair.
+    lid = lid.cut(_cyl(rtd_hole_d / 2, lid_t + 2 * eps, (rtd_x, rtd_y, lid_z0 - eps)))
     for s in (-1, 1):
         lid = lid.cut(_cyl(tie_hole_d / 2, lid_t + 2 * eps,
-                           (ds_x, ds_y + s * lid_tie_span / 2, lid_z0 - eps)))
+                           (rtd_x, rtd_y + s * lid_tie_span / 2, lid_z0 - eps)))
 
     # Recessed freezer-ID label pocket, opening at the lid top face.
     lid = lid.cut(_box(label_x - label_l / 2, label_x + label_l / 2,
@@ -413,7 +413,7 @@ def build_coupon(base):
     # Free strip of floor between the coupon's inner edge and the corner block.
     hx = (x_in + x_block_inner) / 2
     hy = (y_in + y_block_outer) / 2
-    c = c.cut(_cyl(ds_hole_d / 2, floor_t + 2 * eps, (hx, hy, -eps)))
+    c = c.cut(_cyl(rtd_hole_d / 2, floor_t + 2 * eps, (hx, hy, -eps)))
     for s in (-1, 1):
         c = c.cut(_cyl(tie_hole_d / 2, floor_t + 2 * eps,
                        (hx, hy + s * lid_tie_span / 2, -eps)))
@@ -518,15 +518,15 @@ def validate():
          "hold-down post collides with the lid lip in Y")
     need(post_d <= block, "POST_D is wider than the corner block")
 
-    # --- DS18B20 hole -------------------------------------------------------
-    need(abs(ds_hole_d - (mm(CABLE_D) + mm(CABLE_CLEAR))) < 1e-9,
-         "DS18B20 hole is not CABLE_D + CABLE_CLEAR")
+    # --- PT1000 hole --------------------------------------------------------
+    need(abs(rtd_hole_d - (mm(CABLE_D) + mm(CABLE_CLEAR))) < 1e-9,
+         "PT1000 hole is not CABLE_D + CABLE_CLEAR")
     lip_inner_x = cav_l / 2 - lip_clear - lip_w
     lip_inner_y = cav_w / 2 - lip_clear - lip_w
     for label, cx, cy, d in (
-        ("DS cable hole", ds_x, ds_y, ds_hole_d),
-        ("DS tie hole -", ds_x, ds_y - lid_tie_span / 2, tie_hole_d),
-        ("DS tie hole +", ds_x, ds_y + lid_tie_span / 2, tie_hole_d),
+        ("PT1000 cable hole", rtd_x, rtd_y, rtd_hole_d),
+        ("PT1000 tie hole -", rtd_x, rtd_y - lid_tie_span / 2, tie_hole_d),
+        ("PT1000 tie hole +", rtd_x, rtd_y + lid_tie_span / 2, tie_hole_d),
     ):
         need(abs(cx) + d / 2 + min_feature <= lip_inner_x
              and abs(cy) + d / 2 + min_feature <= lip_inner_y,
@@ -541,9 +541,9 @@ def validate():
     feats = [
         ("velcro zone", _rect(velcro_x, velcro_y, velcro_l, velcro_w)),
         ("label pocket", _rect(label_x, label_y, label_l, label_w)),
-        ("DS cable hole", _circ_rect(ds_x, ds_y, ds_hole_d)),
-        ("DS tie hole -", _circ_rect(ds_x, ds_y - lid_tie_span / 2, tie_hole_d)),
-        ("DS tie hole +", _circ_rect(ds_x, ds_y + lid_tie_span / 2, tie_hole_d)),
+        ("PT1000 cable hole", _circ_rect(rtd_x, rtd_y, rtd_hole_d)),
+        ("PT1000 tie hole -", _circ_rect(rtd_x, rtd_y - lid_tie_span / 2, tie_hole_d)),
+        ("PT1000 tie hole +", _circ_rect(rtd_x, rtd_y + lid_tie_span / 2, tie_hole_d)),
     ]
     for sx, sy in CORNERS:
         tx, ty = tower_center(sx, sy)
@@ -565,8 +565,8 @@ def validate():
     hx = (x_in + x_block_inner) / 2
     hy = (y_in + y_block_outer) / 2
     strip = sorted((x_in, x_block_inner))
-    need(strip[0] + min_feature <= hx - ds_hole_d / 2
-         and hx + ds_hole_d / 2 <= strip[1] - min_feature,
+    need(strip[0] + min_feature <= hx - rtd_hole_d / 2
+         and hx + rtd_hole_d / 2 <= strip[1] - min_feature,
          "coupon cable hole does not fit in the free floor strip; raise "
          "COUPON_SIZE")
     span = sorted((y_in, y_block_outer))
@@ -695,8 +695,8 @@ def report():
          "%.2f" % usb_notch_depth),
         ("USB tie hole spacing", "%.3f" % (usb_tie_span / IN),
          "%.2f" % usb_tie_span),
-        ("DS18B20 hole dia", "%.3f" % (ds_hole_d / IN), "%.2f" % ds_hole_d),
-        ("DS tie hole spacing", "%.3f" % (lid_tie_span / IN),
+        ("PT1000 hole dia", "%.3f" % (rtd_hole_d / IN), "%.2f" % rtd_hole_d),
+        ("PT1000 tie hole spacing", "%.3f" % (lid_tie_span / IN),
          "%.2f" % lid_tie_span),
         ("antenna above steel", "%.3f" % (usb_port_z / IN),
          "%.2f" % usb_port_z),
