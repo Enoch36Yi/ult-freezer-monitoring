@@ -9,8 +9,8 @@ create table public.prototype_readings (
   firmware_version text,
   payload_version smallint not null default 1 check (payload_version = 1),
   observation_id text not null,
-  sensor_tier text not null default 'esp32_ds18b20'
-    check (sensor_tier = 'esp32_ds18b20'),
+  sensor_tier text not null default 'esp32_pt1000_max31865'
+    check (sensor_tier in ('esp32_ds18b20', 'esp32_pt1000_max31865')),
   temp_c numeric not null,
   rssi integer,
   reset_reason text,
@@ -42,7 +42,7 @@ create or replace function public.prototype_readings_bucketed(
   p_start timestamptz,
   p_end timestamptz,
   p_bucket_seconds integer,
-  p_sensor_tier text default 'esp32_ds18b20'
+  p_sensor_tier text default 'esp32_pt1000_max31865'
 )
 returns table (
   bucket_time timestamptz,

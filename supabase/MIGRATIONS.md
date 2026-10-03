@@ -30,6 +30,7 @@ continuing:
 | `008_firmware_version.sql` | Record the producing firmware build | Both tables expose nullable `firmware_version` |
 | `009_payload_version.sql` | Record the telemetry payload contract | Both tables expose `payload_version=1` |
 | `010_latest_readings_rpc.sql` | Batch fleet latest-reading lookup | `readings_latest(text)` returns at most one row per freezer |
+| `011_pt1000_max31865_sensor_tier.sql` | Add the shared PT1000/MAX31865 tier without relabeling DS18B20 history | New rows use `esp32_pt1000_max31865`; old `esp32_ds18b20` rows remain queryable |
 
 The application/API deployment should follow migration 009. Deploying code
 that writes `payload_version` before applying 009 will make authenticated

@@ -55,7 +55,7 @@ try {
 $headers.Remove('Prefer')
 
 try {
-    $response = Read-Api '/rest/v1/rpc/readings_latest?p_sensor_tier=esp32_ds18b20'
+    $response = Read-Api '/rest/v1/rpc/readings_latest?p_sensor_tier=esp32_pt1000_max31865'
     $latestRows = @(ConvertFrom-JsonArray $response.Content)
     $seen = @{}
     foreach ($row in $latestRows) {
@@ -71,7 +71,7 @@ try {
 for ($id = 1; $id -le 21; $id++) {
     $interval = if ($id -le 6) { 60 } else { 900 }
     try {
-        $response = Read-Api ('/rest/v1/readings?select=id,temp_c,firmware_version,payload_version,recorded_at,received_at&freezer_id=eq.' + $id + '&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1')
+        $response = Read-Api ('/rest/v1/readings?select=id,temp_c,firmware_version,payload_version,recorded_at,received_at&freezer_id=eq.' + $id + '&sensor_tier=eq.esp32_pt1000_max31865&order=received_at.desc&limit=1')
         $rows = @(ConvertFrom-JsonArray $response.Content)
         $latest = if ($rows.Count -gt 0) { $rows[0] } else { $null }
         $state = 'no_data'
@@ -91,7 +91,7 @@ for ($id = 1; $id -le 21; $id++) {
 
 $prototypeLatest = $null
 try {
-    $response = Read-Api '/rest/v1/prototype_readings?select=id,prototype_id,sensor_tier,temp_c,firmware_version,payload_version,recorded_at,received_at&prototype_id=eq.22&sensor_tier=eq.esp32_ds18b20&order=received_at.desc&limit=1'
+    $response = Read-Api '/rest/v1/prototype_readings?select=id,prototype_id,sensor_tier,temp_c,firmware_version,payload_version,recorded_at,received_at&prototype_id=eq.22&sensor_tier=eq.esp32_pt1000_max31865&order=received_at.desc&limit=1'
     $rows = @(ConvertFrom-JsonArray $response.Content)
     $prototypeLatest = if ($rows.Count -gt 0) { $rows[0] } else { $null }
     $state = 'no_data'
@@ -107,7 +107,7 @@ try {
 # GET invokes a STABLE, read-only RPC. Explicitly test every dashboard tier.
 $start = [uri]::EscapeDataString($now.AddDays(-30).ToString('o'))
 $end = [uri]::EscapeDataString($now.ToString('o'))
-foreach ($tier in @('esp32_ds18b20', 'imonnit', 'traxx')) {
+foreach ($tier in @('esp32_pt1000_max31865', 'esp32_ds18b20', 'imonnit', 'traxx')) {
     try {
         $response = Read-Api ("/rest/v1/rpc/readings_bucketed?p_freezer_id=1&p_start=$start&p_end=$end&p_bucket_seconds=900&p_sensor_tier=$tier")
         $buckets = @(ConvertFrom-JsonArray $response.Content)
@@ -122,7 +122,7 @@ foreach ($tier in @('esp32_ds18b20', 'imonnit', 'traxx')) {
 }
 
 try {
-    $response = Read-Api ("/rest/v1/rpc/prototype_readings_bucketed?p_prototype_id=22&p_start=$start&p_end=$end&p_bucket_seconds=900&p_sensor_tier=esp32_ds18b20")
+    $response = Read-Api ("/rest/v1/rpc/prototype_readings_bucketed?p_prototype_id=22&p_start=$start&p_end=$end&p_bucket_seconds=900&p_sensor_tier=esp32_pt1000_max31865")
     $buckets = @(ConvertFrom-JsonArray $response.Content)
     $required = @('bucket_time', 'avg_temp_c', 'min_temp_c', 'max_temp_c', 'reading_count')
     foreach ($bucket in $buckets) {

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 export function auditDay(rows, date) {
-  const tier = 'esp32_ds18b20';
+  const tier = 'esp32_pt1000_max31865';
   if (!Array.isArray(rows)) throw new Error('Input must be a JSON array of readings');
   const start = Date.parse(`${date}T00:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(start) ||

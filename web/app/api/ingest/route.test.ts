@@ -9,10 +9,10 @@ const SECRET = "test-secret-that-is-long-enough-for-ingest-auth-1234";
 const reading = {
   freezer_id: 1,
   device_id: DEVICE_ID,
-  firmware_version: "0.2.0",
+  firmware_version: "0.3.0",
   observation_id: `${DEVICE_ID}-123-1`,
   payload_version: 1,
-  sensor_tier: "esp32_ds18b20",
+  sensor_tier: "esp32_pt1000_max31865",
   temp_c: -72.125,
   rssi: -48,
   recorded_at: "2026-09-29T12:00:00Z",
@@ -81,6 +81,34 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
     assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [reading]);
     assert.equal((upstreamCalls[0].init?.signal as AbortSignal).aborted, false);
     assert.match(String(new Headers(upstreamCalls[0].init?.headers).get("Prefer")), /return=representation/);
+  });
+
+  await t.test("accepts a legacy queued DS18B20 row without relabeling it", async () => {
+    configure();
+    upstreamCalls.length = 0;
+    const legacy = {
+      ...reading,
+      sensor_tier: "esp32_ds18b20",
+      observation_id: `${DEVICE_ID}-123-2`,
+    };
+    const response = await POST(signedRequest(JSON.stringify(legacy)));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [legacy]);
+  });
+
+  await t.test("accepts the PT1000 operating range below the DS18B20 limit", async () => {
+    configure();
+    upstreamCalls.length = 0;
+    const rtdReading = {
+      ...reading,
+      temp_c: -150,
+      observation_id: `${DEVICE_ID}-123-3`,
+    };
+    const response = await POST(signedRequest(JSON.stringify(rtdReading)));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [rtdReading]);
   });
 
   await t.test("rejects a bad signature before contacting Supabase", async () => {

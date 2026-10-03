@@ -7,7 +7,8 @@ const MAX_BODY_BYTES = 32 * 1024;
 const MAX_BATCH_SIZE = 50;
 const UPSTREAM_TIMEOUT_MS = 5_000;
 const PAYLOAD_VERSION = 1;
-const SENSOR_TIER = "esp32_ds18b20";
+const SENSOR_TIER = "esp32_pt1000_max31865";
+const LEGACY_SENSOR_TIER = "esp32_ds18b20";
 
 type Reading = {
   freezer_id?: number;
@@ -95,9 +96,16 @@ function validReading(reading: Reading, deviceId: string) {
     "observation_id", "clock_valid", "payload_version",
   ]);
   if (Object.keys(reading).some((key) => !allowed.has(key))) return false;
-  if (reading.sensor_tier !== SENSOR_TIER ||
-      typeof reading.temp_c !== "number" || !Number.isFinite(reading.temp_c) ||
-      reading.temp_c < -126 || reading.temp_c > 127) return false;
+  // Accept a legacy queued DS18B20 row while a node upgrades, but never
+  // relabel it. All new firmware payloads use the PT1000/MAX31865 tier.
+  const isCurrentRtd = reading.sensor_tier === SENSOR_TIER;
+  const isLegacyDs18b20 = reading.sensor_tier === LEGACY_SENSOR_TIER;
+  const temperatureInSensorRange = typeof reading.temp_c === "number" &&
+    Number.isFinite(reading.temp_c) &&
+    (isCurrentRtd
+      ? reading.temp_c >= -200 && reading.temp_c <= 850
+      : isLegacyDs18b20 && reading.temp_c >= -126 && reading.temp_c <= 127);
+  if (!temperatureInSensorRange) return false;
   if (reading.rssi !== undefined &&
       (!Number.isInteger(reading.rssi) || reading.rssi < -150 || reading.rssi > 0)) return false;
   if (reading.reset_reason !== undefined &&

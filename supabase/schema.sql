@@ -8,7 +8,7 @@ create table public.readings (
   firmware_version text,
   payload_version smallint not null default 1 check (payload_version = 1),
   observation_id text not null,
-  sensor_tier text not null default 'esp32_ds18b20',
+  sensor_tier text not null default 'esp32_pt1000_max31865',
   temp_c numeric not null,
   rssi integer,
   reset_reason text,
@@ -47,7 +47,7 @@ create or replace function public.readings_bucketed(
   p_start timestamptz,
   p_end timestamptz,
   p_bucket_seconds integer,
-  p_sensor_tier text default 'esp32_ds18b20'
+  p_sensor_tier text default 'esp32_pt1000_max31865'
 )
 returns table (
   bucket_time timestamptz,
@@ -106,7 +106,7 @@ create index if not exists readings_tier_freezer_received_idx
 -- One bounded latest-row lookup for the fleet dashboard. The function keeps
 -- receipt time as the liveness ordering and never mixes sensor tiers.
 create or replace function public.readings_latest(
-  p_sensor_tier text default 'esp32_ds18b20'
+  p_sensor_tier text default 'esp32_pt1000_max31865'
 )
 returns table (
   freezer_id smallint,
@@ -123,7 +123,9 @@ security invoker
 set search_path = ''
 as $$
 begin
-  if p_sensor_tier not in ('esp32_ds18b20', 'imonnit', 'traxx') then
+  if p_sensor_tier not in (
+    'esp32_ds18b20', 'esp32_pt1000_max31865', 'imonnit', 'traxx'
+  ) then
     raise exception using message = 'unsupported sensor tier', errcode = '22023';
   end if;
 
