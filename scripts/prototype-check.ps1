@@ -14,12 +14,14 @@ $expectedHost = 'dfxxamgnrimwoumknuxa.supabase.co'
 $siteUrl = 'https://ult-freezres.vercel.app'
 
 function Read-Serial([string]$Text) {
-    $result = [ordered]@{ sensorFound = $false; sensorMissing = $false; diagnosticRuns = 0; posted = @() }
+    $result = [ordered]@{ sensorReady = $false; sensorFailure = $false; diagnosticRuns = 0; posted = @() }
     $pending = $null
     foreach ($line in ($Text -split "\r?\n")) {
-        if ($line.Contains('[sensor] DS18B20 found')) { $result.sensorFound = $true }
-        if ($line.Contains('[sensor] no DS18B20')) { $result.sensorMissing = $true }
-        if ($line.Contains('[1wire-diag] VERDICT:')) { $result.diagnosticRuns++ }
+        if ($line.Contains('[sensor] MAX31865 ready')) { $result.sensorReady = $true }
+        if ($line.Contains('[sensor] MAX31865')) {
+            $result.diagnosticRuns++
+            if (-not $line.Contains('ready')) { $result.sensorFailure = $true }
+        }
         $match = [regex]::Match($line, '\[reading\] (\{.*\})')
         if ($match.Success) {
             try { $pending = $match.Groups[1].Value | ConvertFrom-Json } catch { $pending = $null }
@@ -46,7 +48,7 @@ $serial = $null
 if ($SerialLog) { $serial = Read-Serial (Get-Content -Raw -LiteralPath $SerialLog) }
 $latest = if ($serial -and $serial.posted.Count) { $serial.posted[-1] } else { $null }
 
-$query = "$baseUrl/rest/v1/prototype_readings?select=id,prototype_id,sensor_tier,temp_c,recorded_at,received_at&prototype_id=eq.22&sensor_tier=eq.esp32_ds18b20"
+$query = "$baseUrl/rest/v1/prototype_readings?select=id,prototype_id,sensor_tier,temp_c,recorded_at,received_at&prototype_id=eq.22&sensor_tier=eq.esp32_pt1000_max31865"
 if ($latest -and $latest.recorded_at) {
     $query += '&recorded_at=eq.' + [uri]::EscapeDataString([string]$latest.recorded_at)
 } else {
@@ -66,12 +68,12 @@ function Test-Page([string]$Url) {
 if ($serial) {
     if (-not $latest) {
         $observation = [ordered]@{ state = 'no_posted_serial_reading' }
-    } elseif ($latest.prototype_id -ne 22 -or $latest.sensor_tier -ne 'esp32_ds18b20' -or -not $latest.recorded_at) {
+    } elseif ($latest.prototype_id -ne 22 -or $latest.sensor_tier -ne 'esp32_pt1000_max31865' -or -not $latest.recorded_at) {
         $observation = [ordered]@{ state = 'posted_serial_reading_lacks_match_fields' }
     } else {
         $when = [DateTimeOffset]::Parse([string]$latest.recorded_at)
         $row = $rows | Where-Object {
-            $_.prototype_id -eq 22 -and $_.sensor_tier -eq 'esp32_ds18b20' -and
+            $_.prototype_id -eq 22 -and $_.sensor_tier -eq 'esp32_pt1000_max31865' -and
             [DateTimeOffset]::Parse([string]$_.recorded_at) -eq $when -and
             [math]::Abs([double]$_.temp_c - [double]$latest.temp_c) -lt 0.0001
         } | Select-Object -First 1
@@ -94,7 +96,7 @@ $report = [ordered]@{
         detail = Test-Page "$siteUrl/prototype/22"
         note   = 'HTTP checks verify routes only; compare the client-rendered temperature in a browser.'
     }
-    serial       = $(if ($serial) { [ordered]@{ sensorFound = $serial.sensorFound; sensorMissing = $serial.sensorMissing; diagnosticRuns = $serial.diagnosticRuns; postedReadings = $serial.posted.Count } } else { $null })
+    serial       = $(if ($serial) { [ordered]@{ sensorReady = $serial.sensorReady; sensorFailure = $serial.sensorFailure; diagnosticRuns = $serial.diagnosticRuns; postedReadings = $serial.posted.Count } } else { $null })
     observation  = $observation
 }
 $json = $report | ConvertTo-Json -Depth 6

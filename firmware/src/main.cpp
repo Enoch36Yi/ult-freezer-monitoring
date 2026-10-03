@@ -1,19 +1,18 @@
 // ---------------------------------------------------------------------------
 // ULT Freezer Monitoring Node
 //
-// ESP32-S3 Supermini + one DS18B20 on GPIO4. The fleet image serves the 21
-// freezers; the separate prototype-22 image serves an isolated bench sensor.
-// Readings are queued in LittleFS while offline and flushed on reconnect.
+// ESP32-S3 Supermini + one two-wire PT1000 through an Adafruit MAX31865 #3648.
+// The same sensor path serves the 21 freezers and the isolated Prototype 22
+// image. Readings are queued in LittleFS while offline and flushed on reconnect.
 // ---------------------------------------------------------------------------
 
 #include <Arduino.h>
 
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
-#include <DallasTemperature.h>
+#include <Adafruit_MAX31865.h>
 #include <HTTPClient.h>
 #include <LittleFS.h>
-#include <OneWire.h>
 #include <Preferences.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -28,6 +27,7 @@
 #include "post_policy.h"
 #include "queue_presence.h"
 #include "queue_recovery.h"
+#include "rtd_validation.h"
 #include "sampling_policy.h"
 #include "supabase_root_ca.h"
 #if __has_include("device_security.h")
@@ -39,16 +39,12 @@
 #ifdef PROTOTYPE_22
 #include "prototype22_wifi.h"
 #endif
-#ifdef ONEWIRE_DIAG
-#include "onewire_diag.h"
-#endif
 
 // --- Globals ---------------------------------------------------------------
 
-static OneWire g_oneWire(ONEWIRE_PIN);
-static DallasTemperature g_sensors(&g_oneWire);
-static DeviceAddress g_probeAddress;
-static bool g_probeFound = false;
+static Adafruit_MAX31865 g_rtd(
+    MAX31865_CS_PIN, MAX31865_MOSI_PIN, MAX31865_MISO_PIN, MAX31865_SCK_PIN);
+static bool g_sensorReady = false;
 
 static Preferences g_prefs;
 static int g_freezerId = 0;
@@ -900,20 +896,63 @@ static void serviceQueue() {
 // --- Sampling --------------------------------------------------------------
 
 static void initSensor() {
-  g_sensors.begin();
-  g_sensors.setResolution(DS18B20_RESOLUTION);
-  g_sensors.setWaitForConversion(true);
-
-  if (g_sensors.getDeviceCount() > 0 && g_sensors.getAddress(g_probeAddress, 0)) {
-    g_probeFound = true;
-    Serial.printf("[sensor] DS18B20 found on GPIO%d\n", ONEWIRE_PIN);
-  } else {
-    Serial.println("[sensor] no DS18B20 on the bus; check DQ wiring and the 6.8k pull-up");
+  // The four-argument constructor selects software SPI in the order
+  // (CS, MOSI, MISO, SCK), matching the wiring contract in config.h.
+  g_sensorReady = g_rtd.begin(MAX31865_2WIRE);
+  if (!g_sensorReady) {
+    Serial.println("[sensor] MAX31865 initialization failed; telemetry paused");
+    return;
   }
-#ifdef ONEWIRE_DIAG
-  // Once at boot as a baseline, then on every failed re-scan (each sample).
-  oneWireDiagnose(g_oneWire, ONEWIRE_PIN);
-#endif
+  // The default is the 60 Hz filter. State it explicitly so a regional mains
+  // change cannot silently alter the measurement configuration.
+  g_rtd.enable50Hz(false);
+  Serial.printf(
+      "[sensor] MAX31865 ready: PT1000 2-wire, software SPI CS=%u MOSI=%u "
+      "MISO=%u SCK=%u\n",
+      MAX31865_CS_PIN, MAX31865_MOSI_PIN, MAX31865_MISO_PIN,
+      MAX31865_SCK_PIN);
+}
+
+static const char *max31865FaultName(uint8_t fault) {
+  if (fault & MAX31865_FAULT_HIGHTHRESH) return "RTD high threshold";
+  if (fault & MAX31865_FAULT_LOWTHRESH) return "RTD low threshold";
+  if (fault & MAX31865_FAULT_REFINLOW) return "reference input low";
+  if (fault & MAX31865_FAULT_REFINHIGH) return "reference input high";
+  if (fault & MAX31865_FAULT_RTDINLOW) return "RTD input low/short";
+  if (fault & MAX31865_FAULT_OVUV) return "over/undervoltage";
+  return "unknown fault";
+}
+
+static bool readTemperature(float &tempC) {
+  if (!g_sensorReady) return false;
+
+  // Adafruit_MAX31865::readRTD performs one bounded one-shot conversion,
+  // disables bias afterward to reduce self-heating, and returns the 15-bit
+  // raw RTD code. No retry loop here: a failed acquisition must return to the
+  // main loop so Wi-Fi, OTA, and queue service continue running.
+  const uint16_t raw = g_rtd.readRTD();
+  const uint8_t fault = g_rtd.readFault(MAX31865_FAULT_NONE);
+  const rtd_validation::SampleStatus status =
+      rtd_validation::classifySample(raw, fault);
+
+  if (status == rtd_validation::SampleStatus::kSpiCommunication) {
+    Serial.printf("[sensor] MAX31865 SPI/acquisition invalid: raw=0x%04X fault=0x%02X\n",
+                  raw, fault);
+    return false;
+  }
+  if (status == rtd_validation::SampleStatus::kHardwareFault) {
+    Serial.printf("[sensor] MAX31865 fault: 0x%02X (%s), skipping reading\n",
+                  fault, max31865FaultName(fault));
+    return false;
+  }
+
+  tempC = rtd_validation::temperatureCFromRaw(raw);
+  if (status != rtd_validation::SampleStatus::kValid) {
+    Serial.printf("[sensor] invalid PT1000 reading: raw=0x%04X resistance=%.2f ohm temp=%.2f C\n",
+                  raw, rtd_validation::resistanceOhms(raw), tempC);
+    return false;
+  }
+  return true;
 }
 
 static String buildReading(float tempC) {
@@ -928,8 +967,8 @@ static String buildReading(float tempC) {
   doc["payload_version"] = TELEMETRY_PAYLOAD_VERSION;
   doc["observation_id"] = observationId(g_sampleSequence);
   doc["sensor_tier"] = SENSOR_TIER;
-  // Fixed 3 decimals, well inside the DS18B20's 0.0625 C step, and avoids
-  // float round-trip noise in the JSON.
+  // Fixed 3 decimals, finer than the MAX31865/PT1000 acquisition resolution,
+  // and avoids float round-trip noise in the JSON.
   doc["temp_c"] = serialized(String(tempC, 3));
   doc["rssi"] = WiFi.RSSI();
   doc["recorded_at"] = isoTimestampUtc();
@@ -953,21 +992,8 @@ static void sampleAndSend() {
     Serial.println("[reading] clock invalid; waiting for NTP before sampling");
     return;
   }
-  if (!g_probeFound) {
-    // Recovery path: re-scan in case the probe was reseated.
-    initSensor();
-    if (!g_probeFound) return;
-  }
-
-  g_sensors.requestTemperatures();
-  const float tempC = g_sensors.getTempC(g_probeAddress);
-
-  if (tempC == DEVICE_DISCONNECTED_C || tempC < TEMP_VALID_MIN_C ||
-      tempC > TEMP_VALID_MAX_C) {
-    Serial.printf("[sensor] bad reading (%.2f C), skipping\n", tempC);
-    g_probeFound = false;
-    return;
-  }
+  float tempC = 0.0f;
+  if (!readTemperature(tempC)) return;
 
   ++g_sampleSequence;
   const String payload = buildReading(tempC);

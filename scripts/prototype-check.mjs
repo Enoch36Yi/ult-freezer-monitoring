@@ -9,13 +9,15 @@ const siteUrl = 'https://ult-freezres.vercel.app';
 export function parseSerial(log) {
   const posted = [];
   let pending = null;
-  let sensorFound = false;
-  let sensorMissing = false;
+  let sensorReady = false;
+  let sensorFailure = false;
   let diagnosticRuns = 0;
   for (const line of log.split(/\r?\n/)) {
-    if (line.includes('[sensor] DS18B20 found')) sensorFound = true;
-    if (line.includes('[sensor] no DS18B20')) sensorMissing = true;
-    if (line.includes('[1wire-diag] VERDICT:')) diagnosticRuns++;
+    if (line.includes('[sensor] MAX31865 ready')) sensorReady = true;
+    if (line.includes('[sensor] MAX31865')) {
+      diagnosticRuns++;
+      if (!line.includes('ready')) sensorFailure = true;
+    }
     const reading = line.match(/\[reading\] (\{.*\})/);
     if (reading) {
       try { pending = JSON.parse(reading[1]); } catch { pending = null; }
@@ -26,18 +28,18 @@ export function parseSerial(log) {
       pending = null;
     }
   }
-  return { sensorFound, sensorMissing, diagnosticRuns, posted };
+  return { sensorReady, sensorFailure, diagnosticRuns, posted };
 }
 
 export function evaluateObservation(serial, rows) {
   const reading = serial.posted.at(-1);
   if (!reading) return { state: 'no_posted_serial_reading' };
-  if (reading.prototype_id !== 22 || reading.sensor_tier !== 'esp32_ds18b20' ||
+  if (reading.prototype_id !== 22 || reading.sensor_tier !== 'esp32_pt1000_max31865' ||
       !Number.isFinite(Date.parse(reading.recorded_at))) {
     return { state: 'posted_serial_reading_lacks_match_fields' };
   }
   const row = rows.find((candidate) =>
-    candidate.prototype_id === 22 && candidate.sensor_tier === 'esp32_ds18b20' &&
+    candidate.prototype_id === 22 && candidate.sensor_tier === 'esp32_pt1000_max31865' &&
     Date.parse(candidate.recorded_at) === Date.parse(reading.recorded_at) &&
     Math.abs(Number(candidate.temp_c) - Number(reading.temp_c)) < 0.0001);
   return row
@@ -45,13 +47,7 @@ export function evaluateObservation(serial, rows) {
     : { state: 'posted_not_found_in_rows', recordedAt: reading.recorded_at };
 }
 
-function envValue(text, name) {
-  const line = text.split(/\r?\n/).find((part) => part.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim().replace(/^['"]|['"]$/g, '');
-}
-
-async function check() {
-  const args = process.argv.slice(2);
+export function parseOptions(args) {
   const validFlags = new Set(['--serial-log', '--report']);
   const supplied = new Set();
   const validArgs = args.length % 2 === 0 && args.every((arg, index) => {
@@ -63,10 +59,20 @@ async function check() {
   if (!validArgs) {
     throw new Error('Usage: node scripts/prototype-check.mjs [--serial-log PATH] [--report PATH]');
   }
-  const option = (name) => {
-    const index = args.indexOf(name);
-    return index >= 0 ? args[index + 1] : undefined;
+  return {
+    serialPath: args.includes('--serial-log') ? args[args.indexOf('--serial-log') + 1] : undefined,
+    reportPath: args.includes('--report') ? args[args.indexOf('--report') + 1] : undefined,
   };
+}
+
+function envValue(text, name) {
+  const line = text.split(/\r?\n/).find((part) => part.startsWith(`${name}=`));
+  return line?.slice(name.length + 1).trim().replace(/^['"]|['"]$/g, '');
+}
+
+async function check() {
+  const args = process.argv.slice(2);
+  const options = parseOptions(args);
   const envText = await readFile(path.join(projectRoot, 'web/.env.local'), 'utf8');
   const baseUrl = envValue(envText, 'NEXT_PUBLIC_SUPABASE_URL');
   const key = envValue(envText, 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ||
@@ -74,13 +80,13 @@ async function check() {
   if (!baseUrl || !key || new URL(baseUrl).host !== expectedHost) {
     throw new Error('Local dashboard config is missing or points to the wrong Supabase project');
   }
-  const serialPath = option('--serial-log');
+  const serialPath = options.serialPath;
   const serial = serialPath ? parseSerial(await readFile(serialPath, 'utf8')) : null;
   const latestPosted = serial?.posted.at(-1);
   const query = new URL('/rest/v1/prototype_readings', baseUrl);
   query.searchParams.set('select', 'id,prototype_id,sensor_tier,temp_c,recorded_at,received_at');
   query.searchParams.set('prototype_id', 'eq.22');
-  query.searchParams.set('sensor_tier', 'eq.esp32_ds18b20');
+  query.searchParams.set('sensor_tier', 'eq.esp32_pt1000_max31865');
   if (latestPosted?.recorded_at) {
     query.searchParams.set('recorded_at', `eq.${latestPosted.recorded_at}`);
   } else {
@@ -106,13 +112,13 @@ async function check() {
       detail: detail.ok && detailText.includes('Prototype 22') ? 'reachable' : `HTTP ${detail.status} or missing label`,
       note: 'HTTP checks verify routes only; compare client-rendered temperature in a browser after a real reading.',
     },
-    serial: serial && { sensorFound: serial.sensorFound, sensorMissing: serial.sensorMissing,
+    serial: serial && { sensorReady: serial.sensorReady, sensorFailure: serial.sensorFailure,
       diagnosticRuns: serial.diagnosticRuns, postedReadings: serial.posted.length },
     observation: serial ? evaluateObservation(serial, rows) : {
       state: rows.length ? 'row_present_without_serial_provenance' : 'no_readings_yet',
     },
   };
-  const reportPath = option('--report');
+  const reportPath = options.reportPath;
   if (reportPath) await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx' });
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   if (report.site.home !== 'reachable' || report.site.detail !== 'reachable') process.exitCode = 1;

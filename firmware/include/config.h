@@ -3,35 +3,20 @@
 // ---------------------------------------------------------------------------
 // Hardware
 // ---------------------------------------------------------------------------
-// DS18B20 DQ on GPIO4. Deliberately not a strapping pin (0, 3, 45, 46) and not
-// an input-only pin. Single 6.8k pull-up from DQ to 3V3 on the bus.
-#define ONEWIRE_PIN 4
-
-// DS18B20 conversion resolution. 12-bit = 0.0625 C, ~750 ms conversion.
-#define DS18B20_RESOLUTION 12
-
-// Capture range — deliberately as wide as the sensor can represent.
-//
-// This is a sensor-comparison study and every real reading matters, so NOTHING
-// is filtered on plausibility at capture time. The only rejected value is the
-// library's disconnected-probe sentinel (-127 C), which is an error code, not
-// a temperature. The bounds below sit just inside the DS18B20's representable
-// range and exclude that sentinel; in practice nothing a probe can physically
-// report will be dropped.
-//
-// Values that merely look odd — notably exactly 85.000 C, the DS18B20's
-// power-on register default — are recorded and left for analysis-time
-// filtering. A dropped reading becomes an unexplained gap, which is worse than
-// a flagged outlier you can exclude later.
-#define TEMP_VALID_MIN_C -126.0f
-#define TEMP_VALID_MAX_C 127.0f
+// Adafruit MAX31865 #3648, software SPI. These pins are not used by any other
+// current firmware peripheral. The board's 4.3 kOhm reference resistor is
+// already correct for the PT1000 and must not be replaced.
+#define MAX31865_CS_PIN 4
+#define MAX31865_MOSI_PIN 5
+#define MAX31865_MISO_PIN 6
+#define MAX31865_SCK_PIN 7
 
 // ---------------------------------------------------------------------------
 // Sampling / reporting
 // ---------------------------------------------------------------------------
-#define FIRMWARE_VERSION "0.2.0"
+#define FIRMWARE_VERSION "0.3.0"
 #define TELEMETRY_PAYLOAD_VERSION 1
-#define SENSOR_TIER "esp32_ds18b20"
+#define SENSOR_TIER "esp32_pt1000_max31865"
 
 #define FREEZER_ID_MIN 1
 #define FREEZER_ID_MAX 21

@@ -50,17 +50,19 @@ The monitoring roles and currently supportable coverage are:
 |---|---|---|
 | TRAXX/KLATU | `traxx` | Commercial comparator; quantity pending purchase |
 | iMonnit | `imonnit` | Commercial comparator; two low-temperature sensors available |
-| In-house ESP32 system | `esp32_ds18b20` | Low-cost research system; 21-node fleet target |
+| In-house ESP32 system | `esp32_pt1000_max31865` | Shared PT1000/MAX31865 research system; 21-node fleet target plus Prototype 22 |
 
 Neither commercial system is designated the unquestioned ground truth. Agreement will be evaluated pairwise. Calibration documentation and stated operating ranges will determine what claims can be made about absolute accuracy.
 
-The present in-house design uses an ESP32-S3 and a DS18B20 probe. The ESP32 is powered continuously through its USB-C connector using a listed, appropriately rated USB power supply. The MCU, USB supply, and mains connection remain outside the freezer. Only the temperature probe enters the cabinet, through a manufacturer-approved access port or other approved route; wiring must not be pinched through the door gasket.
+The present in-house design uses an ESP32-S3, an Adafruit MAX31865 #3648, and a two-wire PT1000 probe. The ESP32 is powered continuously through its USB-C connector using a listed, appropriately rated USB power supply. The MCU, USB supply, and mains connection remain outside the freezer. Only the temperature probe cable enters the cabinet, through a manufacturer-approved access port or other approved route; wiring must not be pinched through the door gasket.
 
-**In-house wiring reference:** The current DS18B20 bench design powers the ESP32-S3 over USB-C and operates the sensor in externally powered mode: ESP32 3V3 to sensor VDD, ESP32 GND to sensor GND, GPIO4 to sensor DQ, and one external pull-up from DQ to 3V3. The bench revision specifies a nominal 6.8 kΩ pull-up. For a TO-92 DS18B20 viewed from its flat face with leads pointing down, the left, middle, and right leads are GND, DQ, and VDD, respectively. The [manufacturer's datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/DS18B20.pdf) illustrates an approximately 5 kΩ pull-up; the bench value is recorded explicitly and must be verified under the chosen cable length and probe configuration. This is a circuit description, not a claim that a photographed or assembled board has passed electrical testing. The final fleet probe, resistor value, cable, and board revision must be documented and accepted before deployment. Prototype 22 remains a separate bench unit and is not counted among the 21 study freezers.
+**In-house wiring reference:** MAX31865 #3648 VIN/GND connect to ESP32 3V3/GND. Software SPI is CS/MOSI/MISO/SCK = GPIO4/5/6/7. The two PT1000 leads connect to RTD+/RTD-, with F+ bridged to RTD+ and F- bridged to RTD-. RDY and 3Vo are unused. The #3648's 4.3 kΩ reference resistor is retained; no DS18B20 or pull-up resistor remains. This is a circuit description, not a claim that a photographed or assembled board has passed electrical testing. The final probe, cable, board revision, and cold-range calibration must be documented and accepted before deployment. Prototype 22 remains a separate bench unit and is not counted among the 21 study freezers.
 
-The final fleet probe model and sensing element remain to be documented. Before collecting study measurements, its datasheet, rated range, pinout, calibration method, firmware compatibility, and `sensor_tier` assignment must be verified. Bench connectivity or Wi-Fi access alone does not establish a valid temperature measurement.
+**Firmware dependency lock for this hardware path:** PlatformIO `espressif32@6.13.0`, Adafruit MAX31865 library `1.6.2`, WiFiManager `2.0.17`, and ArduinoJson `7.4.3`. The MAX31865 is configured in `MAX31865_2WIRE` mode with nominal RTD resistance 1000 Ω and reference resistance 4300 Ω. The RTD conversion and fault classification are covered by the native test target; run `pio test -e native` and `pio run -e esp32-s3` (plus `pio run -e prototype-22` with the private local Wi-Fi header) before release. Both ESP32 targets were built successfully for this repository-only conversion; no device was flashed.
 
-**Critical limitation:** the usual DS18B20 rated range ends at -55 °C, while ULT freezers operate near -70 to -80 °C. Unless the exact purchased probe assembly is documented as rated and calibrated at the study temperatures, its absolute readings are exploratory. It may still be evaluated for repeatability and relative change, but it must not be presented as a traceable -80 °C thermometer. Section 5 defines the required verification.
+The final PT1000 probe model and sensing element must be documented. Before collecting study measurements, its datasheet, rated range, lead mapping, calibration method, firmware compatibility, and `sensor_tier` assignment must be verified. MAX31865 SPI readiness alone does not establish a valid temperature measurement.
+
+**Critical limitation:** a PT1000/MAX31865 software path can support negative temperatures, but the exact purchased probe assembly, cable, adapter wiring, and calibration still determine whether absolute readings are defensible at -70 to -80 °C. Unless the complete chain is documented and calibrated at the study temperatures, its absolute readings are exploratory. It may still be evaluated for repeatability and relative change, but it must not be presented as a traceable -80 °C thermometer. Section 5 defines the required verification.
 
 ### 3.2 Electrical energy monitoring
 
@@ -116,7 +118,7 @@ If a ULT-range reference comparison cannot be completed, absolute-accuracy claim
 
 ### 5.3 Commissioning acceptance
 
-A schematic-level review does not qualify an assembled in-house monitor. Before its 24-hour pilot period, record the hardware revision, MCU and probe identifiers, the actual pull-up value, component-side and solder-side photographs, and the pin-to-pin wiring map. With USB disconnected, check continuity from the actual MCU pads to the actual sensor leads and check for unintended shorts; with USB powered, verify the rail and idle DQ voltages using a common GND reference. Then require repeatable sensor ROM detection, valid measured temperatures, successful upload, and matching stored records. Record intermittent readings, resets, rework, and failed checks rather than treating a momentary continuity beep or voltage as acceptance. If the probe type differs from the bench TO-92 part, verify its own datasheet and pinout rather than copying that lead order.
+A schematic-level review does not qualify an assembled in-house monitor. Before its 24-hour pilot period, record the hardware revision, MCU and probe identifiers, the MAX31865 board/reference resistor, component-side and solder-side photographs, and the pin-to-pin wiring map. With USB disconnected, check continuity from the actual MCU pads to the adapter and from the adapter to the actual RTD leads/bridges; check for unintended shorts. With USB powered, verify the supply rails and then require repeatable SPI/raw acquisition, fault-free conversion, valid measured temperatures, successful upload, and matching stored records. Record intermittent readings, resets, rework, and failed checks rather than treating a momentary continuity beep or room-temperature value as acceptance.
 
 A freezer enters its applicable baseline only after its assigned systems:
 
@@ -187,7 +189,7 @@ Automated checks run at ingestion and in a daily audit:
 - freezer, device, probe, and source codes exist in the registry for that timestamp;
 - units and timestamps parse unambiguously;
 - duplicate source events are rejected deterministically;
-- impossible values, vendor error codes, and disconnected-probe sentinels are flagged;
+- impossible values, vendor error codes, MAX31865 fault states, invalid raw SPI acquisitions, and out-of-range PT1000 conversions are flagged;
 - cadence, gaps, reporting delay, and clock offset are calculated per source and freezer;
 - sudden flat-lines, jumps, and cross-system disagreements are flagged but not deleted;
 - expected-versus-observed counts are reported daily;

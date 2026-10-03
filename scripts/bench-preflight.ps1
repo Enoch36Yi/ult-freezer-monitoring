@@ -28,7 +28,7 @@ if (-not $stage) {
     Say 'FAIL' "No staged build in $stageRoot; run scripts\prepare-bench-day.ps1"
 } else {
     Say 'OK' "Latest staged build: $($stage.FullName) ($($stage.LastWriteTime))"
-    foreach ($environment in @('prototype-22', 'prototype-22-diag')) {
+    foreach ($environment in @('prototype-22')) {
         $image = Join-Path $stage.FullName ".pio\build\$environment\firmware.bin"
         if (Test-Path -LiteralPath $image) {
             Say 'OK' ("{0}: SHA-256 {1}" -f $environment, (Get-FileHash -LiteralPath $image -Algorithm SHA256).Hash)

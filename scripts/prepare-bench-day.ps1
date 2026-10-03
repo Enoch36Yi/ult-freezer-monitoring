@@ -5,7 +5,7 @@
 # What it does:
 #   1. Stages firmware source into a private folder OUTSIDE OneDrive.
 #   2. Writes the network you type into the STAGED copy of prototype22_wifi.h.
-#   3. Builds prototype-22 and prototype-22-diag there (no upload, no erase).
+#   3. Builds the shared prototype-22 image there (no upload, no erase).
 #   4. Prints image paths + SHA-256 and lists the Espressif serial ports it sees.
 #
 # What it never does: upload/flash, erase, touch Supabase or Vercel, or print
@@ -14,10 +14,7 @@
 # -KeepCurrentHeader skips the prompt and builds with the network already in
 # firmware/include/prototype22_wifi.h (a pipeline test, or the same network).
 [CmdletBinding()]
-param(
-    [switch]$SkipDiag,
-    [switch]$KeepCurrentHeader
-)
+param([switch]$KeepCurrentHeader)
 
 $ErrorActionPreference = 'Stop'
 
@@ -54,7 +51,6 @@ Write-Output 'Wrote network into the staged header (value not shown).'
 
 # --- 3. Build (no upload) -----------------------------------------------------
 $environments = @('prototype-22')
-if (-not $SkipDiag) { $environments += 'prototype-22-diag' }
 Push-Location -LiteralPath $staged
 try {
     foreach ($environment in $environments) {
@@ -74,13 +70,10 @@ $latin1 = [System.Text.Encoding]::GetEncoding(28591)
 foreach ($environment in $environments) {
     $image = Join-Path $staged ".pio\build\$environment\firmware.bin"
     $text = $latin1.GetString([System.IO.File]::ReadAllBytes($image))
-    # Sanity: prototype identity present, fleet endpoint path absent as a whole
-    # string, diagnostic marker only in the diag image.
+    # Sanity: prototype identity present and fleet endpoint path absent as a
+    # whole string.
     foreach ($marker in @('/rest/v1/prototype_readings', '/prototype22-queue.jsonl', 'ult-prototype-22')) {
         if (-not $text.Contains($marker)) { throw "$environment image lacks $marker; do not flash it." }
-    }
-    if ($text.Contains('[1wire-diag]') -ne ($environment -eq 'prototype-22-diag')) {
-        throw "$environment image has the wrong diagnostic content; do not flash it."
     }
     $hash = (Get-FileHash -LiteralPath $image -Algorithm SHA256).Hash
     $size = (Get-Item -LiteralPath $image).Length

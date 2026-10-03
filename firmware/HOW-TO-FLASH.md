@@ -59,11 +59,12 @@ Do them **one at a time**. Several unprovisioned nodes at once means several
 near-identical AP names and no way to tell them apart.
 
 **B1. Wire the node**
-- DS18B20 DQ → **GPIO4**
-- One **6.8 kΩ** resistor, DQ → 3V3
-- **100 µF** across the board's 3V3/GND
-- **0.1 µF** across the probe's VDD/GND
-- Probe on **3.3 V, not 5 V**
+- MAX31865 #3648 VIN → ESP32-S3 **3V3**; GND → **GND**
+- MAX31865 CS / SDI(MOSI) / SDO(MISO) / CLK(SCK) → **GPIO4 / GPIO5 / GPIO6 / GPIO7**
+- Two-wire PT1000 Lead A → RTD+, Lead B → RTD-
+- Bridge F+ to RTD+ and F- to RTD-
+- Leave RDY and 3Vo unused
+- Remove the old DS18B20 and its 6.8 kΩ pull-up; keep the MAX31865 #3648's built-in **4.3 kΩ** reference resistor
 
 Full diagram: [root README](../README.md), section 1.
 
@@ -74,10 +75,12 @@ pio run -t upload
 pio device monitor
 ```
 
-**B3. Check the probe is seen**
+**B3. Check the sensor path**
 
-Serial should say `[sensor] DS18B20 found on GPIO4`. If not, fix the wiring
-before going further.
+Serial should say `[sensor] MAX31865 ready: PT1000 2-wire, software SPI CS=4 MOSI=5 MISO=6 SCK=7`.
+The first valid `[reading]` proves raw acquisition, fault status, conversion,
+clock, and the remaining network path. A fault or invalid raw response is
+logged and skipped; it never becomes a telemetry value.
 
 **B4. Note the AP name**
 
@@ -130,7 +133,9 @@ immediate, so a longer wait indicates a connection or posting problem.
 
 # If something goes wrong
 
-- `no DS18B20 on the bus` → DQ on GPIO4, 6.8 kΩ pull-up to 3V3, probe on 3.3 V
+- `MAX31865 SPI/acquisition invalid` → check 3V3/GND and all four SPI wires; confirm CS/MOSI/MISO/SCK are GPIO4/5/6/7 and that the board is not loose
+- `MAX31865 fault` → inspect the PT1000 two-wire/RTD+/RTD-/F+/F- wiring; open and short faults are intentionally rejected
+- `invalid PT1000 reading` → check the PT1000 element, bridge links, reference board, and calibration; no value is uploaded
 - No serial port → charge-only cable; or hold BOOT while plugging in
 - No setup AP → already provisioned; `pio run -t erase` to wipe
 - Portal reopens after saving → wrong password, 5 GHz, or enterprise auth

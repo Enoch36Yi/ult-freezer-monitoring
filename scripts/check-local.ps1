@@ -20,25 +20,19 @@ function Run-Checked([string]$Directory, [string]$Program, [string[]]$Arguments)
 }
 
 Run-Checked 'firmware' 'pio' @('test', '-e', 'native')
-foreach ($environment in @('esp32-s3', 'prototype-22', 'prototype-22-diag')) {
+foreach ($environment in @('esp32-s3', 'prototype-22')) {
     Run-Checked 'firmware' 'pio' @('run', '-e', $environment)
 }
 $fleetImage = Join-Path $root 'firmware/.pio/build/esp32-s3/firmware.bin'
 $image = Join-Path $root 'firmware/.pio/build/prototype-22/firmware.bin'
-$diagImage = Join-Path $root 'firmware/.pio/build/prototype-22-diag/firmware.bin'
 # GetEncoding(28591) is Latin-1; the Encoding.Latin1 property is absent in Windows PowerShell 5.1.
 $latin1 = [System.Text.Encoding]::GetEncoding(28591)
 $fleetText = $latin1.GetString([System.IO.File]::ReadAllBytes($fleetImage))
 $prototypeText = $latin1.GetString([System.IO.File]::ReadAllBytes($image))
-$diagText = $latin1.GetString([System.IO.File]::ReadAllBytes($diagImage))
 foreach ($marker in @('/rest/v1/prototype_readings', '/prototype22-queue.jsonl', 'ult-prototype-22')) {
-    if (-not $prototypeText.Contains($marker) -or -not $diagText.Contains($marker) -or $fleetText.Contains($marker)) {
+    if (-not $prototypeText.Contains($marker) -or $fleetText.Contains($marker)) {
         throw "Prototype image isolation check failed for $marker"
     }
-}
-if ($fleetText.Contains('[1wire-diag]') -or $prototypeText.Contains('[1wire-diag]') -or
-    -not $diagText.Contains('[1wire-diag]')) {
-    throw 'Diagnostic image isolation check failed.'
 }
 Run-Checked 'web' 'npm.cmd' @('test')
 Run-Checked 'web' 'npx.cmd' @('tsc', '--noEmit')
