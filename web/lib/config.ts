@@ -28,20 +28,29 @@ export function offlineAfterMs(freezerId: number): number {
 }
 
 /**
- * Sensor tiers. This is a comparison study: the ESP32/DS18B20 nodes are being
- * measured against two commercial systems in the same freezers, so readings
- * from different tiers must NEVER be aggregated together — different probes,
- * placements and offsets. Every query filters on exactly one tier.
+ * Sensor tiers. This is a comparison study: the in-house PT1000/MAX31865
+ * nodes are measured against two commercial systems in the same freezers, so
+ * readings from different tiers must NEVER be aggregated together. The old
+ * DS18B20 value remains selectable for historical rows and is never relabeled.
  */
+export const IN_HOUSE_SENSOR_TIERS = [
+  { value: "esp32_pt1000_max31865", label: "ESP32 / PT1000 + MAX31865" },
+  { value: "esp32_ds18b20", label: "Historical ESP32 / DS18B20" },
+] as const;
+
 export const SENSOR_TIERS = [
-  { value: "esp32_ds18b20", label: "ESP32 / DS18B20" },
+  ...IN_HOUSE_SENSOR_TIERS,
   { value: "traxx", label: "TRAXX" },
   { value: "imonnit", label: "iMonnit" },
 ] as const;
 
 export type SensorTier = (typeof SENSOR_TIERS)[number]["value"];
 
-export const DEFAULT_SENSOR_TIER: SensorTier = "esp32_ds18b20";
+export const DEFAULT_SENSOR_TIER: SensorTier = "esp32_pt1000_max31865";
+
+export function sensorTierLabel(tier: SensorTier): string {
+  return SENSOR_TIERS.find((option) => option.value === tier)?.label ?? tier;
+}
 
 /** Remembered per browser so the choice survives navigation and reload. */
 export const TIER_STORAGE_KEY = "ult.sensorTier";

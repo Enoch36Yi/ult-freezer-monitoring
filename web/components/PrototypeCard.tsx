@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBadge } from "./StatusBadge";
-import { REFRESH_MS } from "@/lib/config";
+import { DEFAULT_SENSOR_TIER, REFRESH_MS, sensorTierLabel } from "@/lib/config";
 import { cToF, nodeStatusAtInterval, relativeTime } from "@/lib/format";
 import { fetchPrototypeLatest } from "@/lib/readings";
 import { PROTOTYPE_ID, storageForTarget } from "@/lib/target";
@@ -22,7 +22,7 @@ export function PrototypeCard() {
     const currentRequest = ++requestId.current;
     setRefreshing(true);
     try {
-      const latest = await fetchPrototypeLatest();
+      const latest = await fetchPrototypeLatest(DEFAULT_SENSOR_TIER);
       if (currentRequest !== requestId.current) return;
       setReading(latest);
       setError(null);
@@ -48,7 +48,10 @@ export function PrototypeCard() {
   return (
     <section className="mt-8 border-t border-hairline pt-6" aria-label="Prototype">
       <h2 className="mb-1 text-lg font-semibold text-ink">Prototype 22</h2>
-      <p className="mb-4 text-sm text-ink-secondary">Bench instrument · separate from the 21-freezer study</p>
+      <p className="mb-4 text-sm text-ink-secondary">
+        Bench instrument · {sensorTierLabel(DEFAULT_SENSOR_TIER)}{" "}
+        <span className="whitespace-nowrap">· separate from the 21-freezer study</span>
+      </p>
       {error && (
         <div
           role="alert"
@@ -74,12 +77,16 @@ export function PrototypeCard() {
           <span className="text-sm font-semibold text-ink-secondary">Prototype 22</span>
           {loading ? (
             <span className="text-xs font-medium text-ink-muted">Loading…</span>
+          ) : error && !reading ? (
+            <span className="text-xs font-medium text-ink-muted">Unavailable</span>
           ) : (
             <StatusBadge status={status} />
           )}
         </div>
         {loading ? (
           <div className="text-sm text-ink-muted">Waiting for first response…</div>
+        ) : error && !reading ? (
+          <div className="text-2xl font-semibold leading-none text-ink-muted">Unavailable</div>
         ) : reading ? (
           <div>
             <div className="text-3xl font-semibold leading-none text-ink">
@@ -89,7 +96,13 @@ export function PrototypeCard() {
           </div>
         ) : <div className="text-3xl font-semibold leading-none text-ink-muted">—</div>}
         <div className="mt-auto text-xs text-ink-muted tabular">
-          {loading ? "waiting for data" : reading ? relativeTime(reading.received_at, now) : "no readings yet"}
+          {loading
+            ? "waiting for data"
+            : error && !reading
+              ? "data unavailable"
+              : reading
+                ? relativeTime(reading.received_at, now)
+                : "no readings yet"}
         </div>
         {reading?.firmware_version && (
           <span className="inline-flex w-fit rounded border border-hairline px-1.5 py-0.5 text-[10px] text-ink-muted tabular">

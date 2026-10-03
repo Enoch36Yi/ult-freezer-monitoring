@@ -31,9 +31,11 @@ import {
 import type { LatestReading, LatestPrototypeReading } from "@/lib/types";
 import { PROTOTYPE_ID, storageForTarget } from "@/lib/target";
 import {
+  IN_HOUSE_SENSOR_TIERS,
   REFRESH_INTERVAL_LABEL,
   REFRESH_MS,
   postIntervalLabel,
+  sensorTierLabel,
 } from "@/lib/config";
 import { TierSelect, useSensorTier } from "./TierSelect";
 
@@ -42,12 +44,16 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
   const [range, setRange] = useState<RangeKey>(DEFAULT_RANGE);
   const [series, setSeries] = useState<Series>(EMPTY_SERIES);
   const [latest, setLatest] = useState<LatestReading | LatestPrototypeReading | null>(null);
+  const [latestLoaded, setLatestLoaded] = useState(false);
+  const [seriesLoaded, setSeriesLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [tier, setTier] = useSensorTier();
+  const [tier, setTier] = useSensorTier(
+    prototype ? IN_HOUSE_SENSOR_TIERS : undefined,
+  );
   const requestId = useRef(0);
   const previousTier = useRef(tier);
 
@@ -64,13 +70,19 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
         // chart range must not blank out a header that loaded fine — otherwise
         // a broken range makes a healthy freezer look like a dead node.
         const [latestRes, seriesRes] = await Promise.allSettled([
-          prototype ? fetchPrototypeLatest() : fetchLatest(freezerId, tier),
-          prototype ? fetchPrototypeSeries(activeRange) : fetchSeries(freezerId, activeRange, tier),
+          prototype ? fetchPrototypeLatest(tier) : fetchLatest(freezerId, tier),
+          prototype ? fetchPrototypeSeries(activeRange, tier) : fetchSeries(freezerId, activeRange, tier),
         ]);
 
         if (currentRequest !== requestId.current) return;
-        if (latestRes.status === "fulfilled") setLatest(latestRes.value);
-        if (seriesRes.status === "fulfilled") setSeries(seriesRes.value);
+        if (latestRes.status === "fulfilled") {
+          setLatest(latestRes.value);
+          setLatestLoaded(true);
+        }
+        if (seriesRes.status === "fulfilled") {
+          setSeries(seriesRes.value);
+          setSeriesLoaded(true);
+        }
 
         // Report the series failure first — it is the one tied to what the
         // reader just clicked.
@@ -96,9 +108,11 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
     if (previousTier.current !== tier) {
       previousTier.current = tier;
       setLatest(null);
+      setLatestLoaded(false);
       setSeries(EMPTY_SERIES);
-      setError(null);
     }
+    setSeriesLoaded(false);
+    setError(null);
     setLoading(true);
     refresh(range);
     const poll = setInterval(() => refresh(range), REFRESH_MS);
@@ -111,6 +125,8 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
 
   const plotted = useMemo(() => forRender(series), [series]);
   const stats = useMemo(() => seriesStats(series.points), [series]);
+  const latestUnavailable = Boolean(error && !latestLoaded && !latest);
+  const historyUnavailable = Boolean(error && !seriesLoaded);
   const status = prototype
     ? nodeStatusAtInterval(latest?.received_at, now, storageForTarget({ kind: "prototype", id: PROTOTYPE_ID }).intervalMs)
     : nodeStatus(latest?.received_at, now, freezerId);
@@ -138,20 +154,35 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
       <header className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-xl font-semibold text-ink">{prototype ? "Prototype 22" : `Freezer ${freezerId}`}</h1>
         <div className="flex flex-wrap items-center gap-4">
-          {!prototype && <TierSelect tier={tier} onChange={setTier} />}
+          <TierSelect
+            tier={tier}
+            onChange={setTier}
+            options={prototype ? IN_HOUSE_SENSOR_TIERS : undefined}
+          />
           <div className="flex items-center gap-3">
             {loading && !latest ? (
               <span className="text-xs font-medium text-ink-muted">Loading…</span>
+            ) : latestUnavailable ? (
+              <span className="text-xs font-medium text-ink-muted">Unavailable</span>
             ) : (
               <StatusBadge status={status} />
             )}
             <span className="text-xs text-ink-muted tabular">
-              {loading && !latest ? "waiting for data" : `last seen ${relativeTime(latest?.received_at, now)}`}
+              {loading && !latest
+                ? "waiting for data"
+                : latestUnavailable
+                  ? "data unavailable"
+                  : `last seen ${relativeTime(latest?.received_at, now)}`}
             </span>
           </div>
         </div>
       </header>
-      {prototype && <p className="mt-2 text-sm text-ink-secondary">Bench instrument · DS18B20 · excluded from the 21-freezer study</p>}
+      {prototype && (
+        <p className="mt-2 text-sm text-ink-secondary">
+          Bench instrument · {sensorTierLabel(tier)}{" "}
+          <span className="whitespace-nowrap">· excluded from the 21-freezer study</span>
+        </p>
+      )}
       {latest?.firmware_version && (
         <p className="mt-2 inline-flex rounded border border-hairline px-1.5 py-0.5 text-xs text-ink-muted tabular">
           firmware {latest.firmware_version}
@@ -184,14 +215,14 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
       <section className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat
           label="Current"
-          value={latest ? `${cToF(latest.temp_c).toFixed(1)} °F` : "—"}
-          sub={latest ? `${latest.temp_c.toFixed(2)} °C` : "no readings"}
+          value={latest ? `${cToF(latest.temp_c).toFixed(1)} °F` : latestUnavailable ? "Unavailable" : "—"}
+          sub={latest ? `${latest.temp_c.toFixed(2)} °C` : latestUnavailable ? "try again" : "no readings"}
           emphasis
         />
         <Stat
           label={`Mean · ${RANGES[range].label}`}
-          value={stats ? `${cToF(stats.mean).toFixed(1)} °F` : "—"}
-          sub={stats ? `${stats.mean.toFixed(2)} °C` : "—"}
+          value={stats ? `${cToF(stats.mean).toFixed(1)} °F` : historyUnavailable ? "Unavailable" : "—"}
+          sub={stats ? `${stats.mean.toFixed(2)} °C` : historyUnavailable ? "try again" : "—"}
         />
         <Stat
           // "to" rather than an en dash: every value here is negative, and
@@ -200,17 +231,17 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
           value={
             stats
               ? `${cToF(stats.min).toFixed(1)} to ${cToF(stats.max).toFixed(1)} °F`
-              : "—"
+              : historyUnavailable ? "Unavailable" : "—"
           }
-          sub={stats ? `${stats.min.toFixed(1)} to ${stats.max.toFixed(1)} °C` : "—"}
+          sub={stats ? `${stats.min.toFixed(1)} to ${stats.max.toFixed(1)} °C` : historyUnavailable ? "try again" : "—"}
         />
         <Stat
           label="Signal"
-          value={rssiLabel(latest?.rssi).split(" · ")[0]}
+          value={latestUnavailable ? "Unavailable" : rssiLabel(latest?.rssi).split(" · ")[0]}
           sub={
             latest?.rssi !== null && latest?.rssi !== undefined
               ? rssiLabel(latest.rssi).split(" · ")[1]
-              : "—"
+              : latestUnavailable ? "Unavailable" : "—"
           }
         />
       </section>
@@ -250,6 +281,10 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
           <div className="flex h-[360px] items-center justify-center rounded-lg border border-hairline bg-surface text-sm text-ink-muted">
             Loading history…
           </div>
+        ) : historyUnavailable ? (
+          <div className="flex h-[360px] items-center justify-center rounded-lg border border-hairline bg-surface text-sm text-ink-muted">
+            Readings unavailable right now.
+          </div>
         ) : showTable ? (
           <SeriesTable points={series.points} banded={series.mode === "bucketed"} />
         ) : (
@@ -258,7 +293,7 @@ export function FreezerDetail({ freezerId, prototype = false }: { freezerId: num
       </div>
 
       <p className="mt-3 text-xs text-ink-muted">
-        {series.totalReadings.toLocaleString()} readings
+        {historyUnavailable ? "Readings unavailable" : `${series.totalReadings.toLocaleString()} readings`}
         {spanNote && ` · ${spanNote}`}
         {series.mode === "bucketed"
           ? ` · aggregated server-side into ${series.points.length.toLocaleString()} ${bucketLabel(

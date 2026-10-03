@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { FREEZER_IDS, type HistoryPoint, type LatestReading, type LatestPrototypeReading } from "./types";
-import type { SensorTier } from "./config";
+import { DEFAULT_SENSOR_TIER, type SensorTier } from "./config";
 import { PROTOTYPE_ID, storageForTarget, type MonitoringTarget } from "./target";
 
 // PostgREST caps a response at 1000 rows (Supabase's default "Max rows"
@@ -59,12 +59,14 @@ export async function fetchLatest(
 }
 
 /** Most recent bench measurement; deliberately separate from the fleet map. */
-export async function fetchPrototypeLatest(): Promise<LatestPrototypeReading | null> {
+export async function fetchPrototypeLatest(
+  tier: SensorTier = DEFAULT_SENSOR_TIER,
+): Promise<LatestPrototypeReading | null> {
   const { data, error } = await supabase
     .from("prototype_readings")
     .select("prototype_id,firmware_version,temp_c,rssi,reset_reason,recorded_at,received_at")
     .eq("prototype_id", PROTOTYPE_ID)
-    .eq("sensor_tier", "esp32_ds18b20")
+    .eq("sensor_tier", tier)
     .order("received_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -73,8 +75,11 @@ export async function fetchPrototypeLatest(): Promise<LatestPrototypeReading | n
   return { ...data, temp_c: Number(data.temp_c) } as LatestPrototypeReading;
 }
 
-export async function fetchPrototypeSeries(range: RangeKey): Promise<Series> {
-  return fetchTargetSeries({ kind: "prototype", id: PROTOTYPE_ID }, range, "esp32_ds18b20");
+export async function fetchPrototypeSeries(
+  range: RangeKey,
+  tier: SensorTier = DEFAULT_SENSOR_TIER,
+): Promise<Series> {
+  return fetchTargetSeries({ kind: "prototype", id: PROTOTYPE_ID }, range, tier);
 }
 
 /** Timestamp of the freezer's first-ever reading, for the "All time" range. */
@@ -267,7 +272,7 @@ async function fetchTargetSeries(
     // "All time" — anchor on the freezer's first reading.
     const earliest = target.kind === "freezer"
       ? await fetchEarliestTimestamp(target.id, tier)
-      : await fetchPrototypeEarliestTimestamp();
+      : await fetchPrototypeEarliestTimestamp(tier);
     if (!earliest) return { ...EMPTY_SERIES, end };
     start = new Date(earliest);
   }
@@ -277,12 +282,12 @@ async function fetchTargetSeries(
     : fetchBucketedSeries(target, start, end, tier);
 }
 
-async function fetchPrototypeEarliestTimestamp(): Promise<string | null> {
+async function fetchPrototypeEarliestTimestamp(tier: SensorTier): Promise<string | null> {
   const { data, error } = await supabase
     .from("prototype_readings")
     .select("recorded_at")
     .eq("prototype_id", PROTOTYPE_ID)
-    .eq("sensor_tier", "esp32_ds18b20")
+    .eq("sensor_tier", tier)
     .order("recorded_at", { ascending: true })
     .limit(1)
     .maybeSingle();

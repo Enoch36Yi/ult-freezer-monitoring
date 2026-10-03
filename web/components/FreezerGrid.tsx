@@ -13,6 +13,7 @@ import { PrototypeCard } from "./PrototypeCard";
 export function FreezerGrid() {
   const [readings, setReadings] = useState<Map<number, LatestReading>>(new Map());
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [hasSuccessfulResponse, setHasSuccessfulResponse] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -27,12 +28,9 @@ export function FreezerGrid() {
     try {
       const latest = await fetchLatestPerFreezer(tier);
       if (currentRequest !== requestId.current) return;
-      setReadings((previous) => {
-        const next = new Map(previous);
-        for (const row of latest.values()) next.set(row.freezer_id, row);
-        return next;
-      });
-      if (latest.size > 0) setLastUpdated(Date.now());
+      setReadings(new Map(latest));
+      setHasSuccessfulResponse(true);
+      setLastUpdated(Date.now());
       setError(null);
     } catch {
       if (currentRequest !== requestId.current) return;
@@ -51,6 +49,7 @@ export function FreezerGrid() {
     const emptyReadings = new Map<number, LatestReading>();
     setReadings(emptyReadings);
     setLastUpdated(null);
+    setHasSuccessfulResponse(false);
     setError(null);
     setLoading(true);
     refresh();
@@ -72,22 +71,25 @@ export function FreezerGrid() {
     },
     { live: 0, attention: 0 },
   );
+  const dataUnavailable = Boolean(error && !hasSuccessfulResponse);
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-ink-secondary">
+      <div className="flex flex-col gap-3 text-sm text-ink-secondary sm:flex-row sm:items-baseline sm:justify-between">
         <span aria-live="polite">
           {loading && readings.size === 0
             ? `Loading ${FREEZER_IDS.length} freezers…`
+            : dataUnavailable
+              ? "Freezer status unavailable"
             : `${counts.live} of ${FREEZER_IDS.length} reporting`}
-          {!loading && counts.attention > 0 && (
+          {!loading && !dataUnavailable && counts.attention > 0 && (
             <span className="text-ink-muted">
               {" "}
               · {counts.attention} need attention
             </span>
           )}
         </span>
-        <div className="flex items-center gap-4">
+        <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
           <TierSelect tier={tier} onChange={setTier} />
           <span className="text-xs text-ink-muted tabular">
             {loading
@@ -132,6 +134,7 @@ export function FreezerGrid() {
             freezerId={id}
             reading={readings.get(id)}
             loading={loading && readings.size === 0}
+            unavailable={dataUnavailable}
             now={now}
           />
         ))}

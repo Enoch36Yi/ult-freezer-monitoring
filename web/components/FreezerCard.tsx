@@ -12,11 +12,13 @@ export function FreezerCard({
   freezerId,
   reading,
   loading = false,
+  unavailable = false,
   now,
 }: {
   freezerId: number;
   reading: LatestReading | undefined;
   loading?: boolean;
+  unavailable?: boolean;
   now: number;
 }) {
   const status: NodeStatus = nodeStatus(reading?.received_at, now, freezerId);
@@ -27,12 +29,14 @@ export function FreezerCard({
       href={`/freezer/${freezerId}`}
       className="group flex flex-col gap-3 rounded-lg border border-hairline bg-surface p-4 transition-colors hover:border-series focus:outline-none focus-visible:ring-2 focus-visible:ring-series"
     >
-      <div className="flex items-baseline justify-between">
-        <span className="text-sm font-semibold text-ink-secondary">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+        <span className="whitespace-nowrap text-sm font-semibold text-ink-secondary">
           Freezer {freezerId}
         </span>
         {loading ? (
-          <span className="text-xs font-medium text-ink-muted">Loading…</span>
+          <span className="whitespace-nowrap text-xs font-medium text-ink-muted">Loading…</span>
+        ) : unavailable ? (
+          <span className="whitespace-nowrap text-xs font-medium text-ink-muted">Unavailable</span>
         ) : (
           <StatusBadge status={status} />
         )}
@@ -40,6 +44,8 @@ export function FreezerCard({
 
       {loading ? (
         <div className="text-sm text-ink-muted">Waiting for first response…</div>
+      ) : unavailable ? (
+        <div className="text-2xl font-semibold leading-none text-ink-muted">Unavailable</div>
       ) : hasReading ? (
         <div>
           <div className="text-3xl font-semibold leading-none text-ink">
@@ -55,7 +61,13 @@ export function FreezerCard({
       )}
 
       <div className="mt-auto text-xs text-ink-muted tabular">
-        {loading ? "waiting for data" : hasReading ? relativeTime(reading.received_at, now) : "no readings yet"}
+        {loading
+          ? "waiting for data"
+          : unavailable
+            ? "data unavailable"
+            : hasReading
+              ? relativeTime(reading.received_at, now)
+              : "no readings yet"}
       </div>
       {reading?.firmware_version && (
         <span className="inline-flex w-fit rounded border border-hairline px-1.5 py-0.5 text-[10px] text-ink-muted tabular">
