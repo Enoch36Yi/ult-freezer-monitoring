@@ -1,30 +1,30 @@
 # ULT freezer monitoring
 
-An ESP32-S3 sensing node, authenticated telemetry service, dashboard, and enclosure CAD for 21 ultra-low-temperature freezers at UW's Eichler Lab. Deployment is in progress. The project received a UW CSF-Large Grant of $18,500.
+Temperature monitoring for 21 ultra-low-temperature freezers at UW's Eichler Lab. The project received an $18,500 UW CSF-Large Grant. Deployment is in progress, and we are analyzing energy and temperature data to measure preventive-maintenance savings.
 
-## Contributions and scope
+I manage the project. My work includes the sensor circuits, node firmware, Supabase backend, and enclosure CAD. The installation and study are a team effort; savings measurements are still in progress.
 
-Enoch Yi is project manager. He designed sensor circuits, wrote node firmware, built the Supabase backend, and developed enclosure CAD. Energy and temperature analysis aims to measure preventive-maintenance savings; no completed savings figure is claimed here. Broader lab/team work is not represented as Enoch's sole contribution.
+## How it works
 
-This source update preserves the repository history and incorporates selected current builders, tests, dependency files, and migration source. Private device headers, actual environment files, research data, internal coordination notes, logs, compiled images, and transfer archives are excluded from this update. Production endpoint defaults in the newly published firmware configuration are placeholders. Existing historical repository content is preserved, not rewritten.
+A two-wire PT1000 connects to an Adafruit MAX31865 #3648 and an ESP32-S3. Only the sensor and lead enter the freezer; the electronics and USB power stay outside. Software SPI uses GPIO 4/5/6/7 for CS/MOSI/MISO/SCK, with the board's 4,300-ohm reference retained.
 
-## Architecture
+The node sends readings over HTTPS. A Next.js route checks each device's HMAC signature and writes to Supabase/PostgreSQL. A LittleFS queue buffers readings during outages. The dashboard shows temperature and device status.
 
-- **Acquisition:** two-wire PT1000 through Adafruit MAX31865 #3648 (4,300-ohm reference), software SPI GPIO CS/MOSI/MISO/SCK 4/5/6/7; ESP32-S3 firmware.
-- **Transport:** HTTPS to the dashboard ingestion route, per-device HMAC validation, observation identity and replay handling, and a bounded LittleFS offline queue.
-- **Backend:** Next.js server route and Supabase/PostgreSQL schema. SQL migrations are source files; their presence does not establish application to production.
-- **Dashboard:** temperature/status views and study/prototype separation.
-- **Enclosure:** editable CadQuery model. Sensor and lead enter the freezer; electronics and USB power remain outside.
+Freezers 1-6 nominally sample every 60 seconds, and 7-21 every 900 seconds. Prototype 22 is a separate bench device with separate storage.
 
-Study devices 1-6 nominally acquire every 60 seconds; 7-21 every 900 seconds. Prototype 22 is a separate bench target, not a 22nd study freezer.
+| Folder | Contents |
+| --- | --- |
+| `firmware/` | ESP32-S3/PT1000 firmware, PlatformIO configuration, host tests |
+| `web/` | Dashboard and authenticated ingest route |
+| `supabase/` | Schema and migration files |
+| `cad_enclosure/` | CadQuery enclosure builders and geometry checks |
+| `scripts/` | Offline data audits, synthetic restore tests, local QA tools |
 
-## Publication status
+## Run locally
 
-This is the `portfolio-source-review-20261019` review branch. The operational `main` branch is unchanged. The branch is disabled for automatic Vercel Git deployment by matching configuration at both the repository and web project roots. Other branches retain their deployment settings. The ingest-route change and replay-conflict migration require coordinated production acceptance before any release. No migration or deployment is performed here.
+Build outside OneDrive. The firmware uses PlatformIO; the web application uses Node.js/npm. Dependency versions are recorded in `firmware/platformio.ini` and `web/package-lock.json`.
 
-## Setup
-
-Build outside OneDrive. Use the pinned PlatformIO platform/libraries in `firmware/platformio.ini` and the committed web lockfile. PlatformIO requires Python; the web application uses Node.js/npm.
+For the dashboard, copy `web/.env.example` to an ignored local environment file and fill in your own settings. Service credentials belong on the server, never in a `NEXT_PUBLIC_*` variable.
 
 ```sh
 cd web
@@ -34,7 +34,7 @@ npm run typecheck
 npm run build
 ```
 
-Copy `web/.env.example` to a local ignored environment file and fill in your own settings. Keep service-role/secret keys server-side; never place them in `NEXT_PUBLIC_*` variables. Provision device secrets through the documented flow. `firmware/include/device_security.example.h` is placeholder configuration; a real `device_security.h` must stay ignored. The bench Wi-Fi header, if needed, is also private. Set the firmware's placeholder dashboard URL before building for actual use.
+For firmware, set the placeholder ingest URL in `firmware/include/config.h`. Use `device_security.example.h` as the template for a private local header; keep real Wi-Fi, ingest, provisioning and OTA credentials out of Git.
 
 ```sh
 cd firmware
@@ -43,11 +43,9 @@ pio run -e esp32-s3
 pio run -e prototype-22
 ```
 
-These are test/compile commands, not authorization to flash. No firmware, backend, migration or dashboard deployment is performed by this repository update. Review `firmware/HOW-TO-FLASH.md` and the current lab acceptance procedure before operational use.
+These commands compile and test. Follow `firmware/HOW-TO-FLASH.md` and the lab's acceptance procedure before flashing a device.
 
-## CAD builders
-
-Install `cad_enclosure/requirements.txt` in an isolated Python environment. Build fresh exports before running mesh checks; dated outputs are not added in this source-only update.
+For the enclosure, install `cad_enclosure/requirements.txt` in a Python virtual environment, then run these from the repository root:
 
 ```sh
 python cad_enclosure/enclosure_pt1000.py --output cad_enclosure/revision_pt1000_2026-10-17
@@ -56,14 +54,15 @@ python cad_enclosure/test_probe_exit_mesh.py cad_enclosure/revision_pt1000_2026-
 python cad_enclosure/verify_enclosure_exports.py cad_enclosure/revision_pt1000_2026-10-17
 ```
 
-Orientation, clearances, actual probe/cable dimensions and physical fit remain open acceptance items. Digital solids/mesh checks do not establish assembly suitability, printer tolerance or cold performance. Older exports in the repository remain historical references.
+## Where things stand
 
-## Verification and limitations
+This is the `portfolio-source-review-20261019` branch. Main is unchanged, and automatic Vercel deployment is disabled for this branch. The ingest-route change needs the matching replay-conflict migration and a production-schema check before release. No migration or deployment was performed for this update.
 
-The source checkout's 42 offline automation/SQL tests passed during this review using synthetic fixtures. The matched web source passed 24 tests and TypeScript typechecking. The selected CAD builder passed 7 geometry tests. The source-only publication copy also passed all 42 automation/SQL tests. Historical local QA also covers firmware compilation and CAD; those prior results are not a claim of new hardware validation. The full PowerShell runner was blocked by the current shell's script execution policy in this review; no security policy was changed.
+The publication copy passed 42 offline automation/SQL tests with synthetic fixtures. Matched web source passed 24 tests and TypeScript checking; the enclosure builder passed seven geometry tests. The full PowerShell runner was blocked by local script-execution policy. See `docs/LOCAL_QA_RUNNER.md` for its setup and limits.
 
-See `docs/LOCAL_QA_RUNNER.md` for the full local QA command and tool configuration. Some full-suite stages need a separately prepared bench project and generated CAD exports. `scripts/qa-config.example.json` contains placeholder tool paths. Synthetic restore tests are not production restore acceptance.
+Two issues still need work:
 
-Important remaining work includes observation-ID reuse after NVS erase or device replacement (`docs/OBSERVATION_IDENTITY_DECISION.md`), production-schema/restore acceptance, enclosure orientation and fit, cold accuracy, excitation compatibility, and approved door-gasket cable routing. User-reported live uploads are not independently verified here. No preventive-maintenance savings result is inferred.
+- Observation IDs can repeat after NVS erase or an MCU replacement, causing new readings to be dropped as duplicates. The options are recorded in `docs/OBSERVATION_IDENTITY_DECISION.md`.
+- Enclosure orientation, measured cable/connector clearances, physical fit, cold accuracy and door-gasket routing still need lab acceptance.
 
-No new license has been added. Existing repository licensing and history are preserved.
+This branch contains source, builders, tests and setup files. Real credentials, environment files, datasets, internal notes, logs and compiled images were excluded from the update. Earlier repository history is preserved.
