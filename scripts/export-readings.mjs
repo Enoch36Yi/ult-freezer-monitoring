@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseTimestamp } from '../web/lib/reading-timestamps.mjs';
 
 const PAGE_SIZE = 1000;
 const TABLES = new Set(['readings', 'prototype_readings']);
@@ -25,8 +26,8 @@ export function parseArgs(args) {
   if (!options['--table'] || !options['--output'] || !TABLES.has(options['--table'])) {
     throw new Error(usage());
   }
-  if ((options['--start'] && !Number.isFinite(Date.parse(options['--start']))) ||
-      (options['--end'] && !Number.isFinite(Date.parse(options['--end'])))) {
+  if ((options['--start'] && parseTimestamp(options['--start']) === null) ||
+      (options['--end'] && parseTimestamp(options['--end']) === null)) {
     throw new Error('Start and end must be valid ISO timestamps.');
   }
   if (options['--start'] && options['--end'] &&
@@ -90,6 +91,7 @@ async function fetchRows({ table, start, end }, config, fetchImpl = fetch) {
   const rows = [];
   let offset = 0;
   let pages = 0;
+  let previousId = -1n;
   while (true) {
     const params = new URLSearchParams({
       select: '*',
@@ -97,21 +99,31 @@ async function fetchRows({ table, start, end }, config, fetchImpl = fetch) {
       limit: String(PAGE_SIZE),
       offset: String(offset),
     });
-    if (start) params.set('recorded_at', `gte.${start}`);
-    if (end) params.set('recorded_at', `lt.${end}`);
+    if (start) params.append('recorded_at', `gte.${start}`);
+    if (end) params.append('recorded_at', `lt.${end}`);
     const response = await fetchImpl(`${config.baseUrl}/rest/v1/${table}?${params}`, {
       headers: {
         apikey: config.key,
-        Authorization: `Bearer ${config.key}`,
+        ...(config.key.startsWith('sb_publishable_') ? {} : { Authorization: `Bearer ${config.key}` }),
       },
     });
     if (!response.ok) throw new Error(`Supabase returned HTTP ${response.status} at offset ${offset}.`);
     const page = await response.json();
     if (!Array.isArray(page)) throw new Error(`Supabase returned a non-array page at offset ${offset}.`);
+    for (const row of page) {
+      const id = row?.id;
+      if (!((typeof id === 'number' && Number.isSafeInteger(id) && id >= 0) ||
+            (typeof id === 'string' && /^\d+$/.test(id))) || BigInt(id) <= previousId) {
+        throw new Error(`Export IDs did not progress in ascending order at offset ${offset}.`);
+      }
+      previousId = BigInt(id);
+    }
     rows.push(...page);
     pages++;
-    if (page.length < PAGE_SIZE) return { rows, pages };
-    offset += PAGE_SIZE;
+    // A server may cap responses below our requested limit. Only an empty
+    // page proves exhaustion; advance by what was actually returned.
+    if (page.length === 0) return { rows, pages };
+    offset += page.length;
   }
 }
 

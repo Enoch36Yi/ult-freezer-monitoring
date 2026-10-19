@@ -1,5 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
+import { parseTimestamp } from "../../../lib/reading-timestamps.mjs";
 
 export const runtime = "nodejs";
 
@@ -115,7 +116,7 @@ function validReading(reading: Reading, deviceId: string) {
        !/^[0-9A-Za-z._+-]{1,32}$/.test(reading.firmware_version))) return false;
   if (reading.payload_version !== undefined && reading.payload_version !== PAYLOAD_VERSION) return false;
   if (reading.recorded_at !== undefined &&
-      (typeof reading.recorded_at !== "string" || Number.isNaN(Date.parse(reading.recorded_at)))) return false;
+      parseTimestamp(reading.recorded_at) === null) return false;
   if (reading.clock_valid !== undefined && reading.clock_valid !== true) return false;
   // A legacy queued row may omit clock_valid, but it must still carry the
   // device's actual measurement timestamp. Never let the server invent one.
@@ -174,6 +175,11 @@ export async function POST(request: Request) {
   const table = deviceId === "prototype-22" ? "prototype_readings" : "readings";
   const normalizedRows = rows.map((row) => ({
     ...(row as Reading),
+    // PostgREST bulk rows must have identical keys, including optional fields
+    // present only on a boot sample. Preserve their absence as SQL NULL.
+    rssi: (row as Reading).rssi ?? null,
+    reset_reason: (row as Reading).reset_reason ?? null,
+    firmware_version: (row as Reading).firmware_version ?? null,
     clock_valid: true,
     payload_version: (row as Reading).payload_version ?? PAYLOAD_VERSION,
   }));
@@ -182,11 +188,11 @@ export async function POST(request: Request) {
   let upstream: Response;
   let inserted: unknown = null;
   try {
-    upstream = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+    upstream = await fetch(`${supabaseUrl}/rest/v1/${table}?on_conflict=device_id,observation_id`, {
       method: "POST",
       headers: {
         apikey: serverKey,
-        Authorization: `Bearer ${serverKey}`,
+        ...(serverKey.startsWith("sb_secret_") ? {} : { Authorization: `Bearer ${serverKey}` }),
         "Content-Type": "application/json",
         // Representation lets us distinguish inserts from rows ignored by
         // the replay-safe unique constraint.
