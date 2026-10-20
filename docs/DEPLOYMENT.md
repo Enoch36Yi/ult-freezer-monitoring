@@ -123,7 +123,8 @@ cp firmware/include/device_security.example.h firmware/include/device_security.h
 Replace the placeholders locally:
 
 - `PROVISION_AP_PASSWORD`: a strong password for the setup AP;
-- `OTA_PASSWORD_HASH`: the SHA-256 hex digest of the OTA upload password;
+- `OTA_PASSWORD_HASH`: the 32-character lowercase MD5 digest required by the
+  pinned ArduinoOTA/espota authentication protocol;
 - `DEVICE_INGEST_SECRET`: the Prototype 22 secret, matching the server map.
 
 Fleet ingest secrets are entered per node through the provisioning portal and
@@ -132,12 +133,14 @@ ignored header. Generate an OTA hash without putting the password in a file:
 
 ```bash
 read -r -s OTA_PASSWORD
-printf '%s' "$OTA_PASSWORD" | sha256sum
+printf '%s' "$OTA_PASSWORD" | md5sum
 unset OTA_PASSWORD
 ```
 
 Keep the cleartext OTA password in a password manager. The upload command later
-uses that password; the firmware stores only its hash.
+uses that password; the firmware stores only its hash. This legacy upload
+authentication is not firmware signing. Restrict OTA to the trusted device
+network; see [OTA_RUNBOOK.md](OTA_RUNBOOK.md) for its security limits.
 
 For Prototype 22, create the ignored Wi-Fi header through the bench preparation
 script so the password stays out of the repository and logs:
