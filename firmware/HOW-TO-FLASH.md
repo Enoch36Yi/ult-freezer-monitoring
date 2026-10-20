@@ -164,8 +164,10 @@ pio run -e esp32-s3-ota -t upload --upload-port <exact-node-host-or-ip> \
 ```
 
 OTA stays disabled until the ignored `include/device_security.h` supplies a
-64-character SHA-256 `OTA_PASSWORD_HASH`. Keep the matching cleartext password
-in a password manager or shell secret; never put either value in Git.
+32-character lowercase MD5 `OTA_PASSWORD_HASH`, as required by the pinned
+ArduinoOTA/espota authentication protocol. This is not firmware signing; keep
+OTA on the trusted device network. Keep the matching cleartext password in a
+password manager or shell secret; never put either value in Git.
 Freezer number, WiFi credentials, NVS, and the LittleFS queue survive an OTA
 update. Never rely on a default target: identify the labeled node first. A
 node that was USB-flashed with the rollback-enabled firmware can automatically

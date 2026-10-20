@@ -11,6 +11,7 @@ firmware/sdkconfig.*
 __pycache__/
 .next/
 .vercel/
+supabase/.temp/
 *.tsbuildinfo
 *.elf
 *.map
@@ -19,3 +20,11 @@ __pycache__/
 release-manifest*.json
 **/.env*
 !**/.env.example
+
+# Never publish device configuration, private exports, or build artifacts.
+**/device_security.h
+**/prototype22_wifi.h
+**/secrets.*
+*.zip
+*.jsonl
+*.bin

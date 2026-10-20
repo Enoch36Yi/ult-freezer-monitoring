@@ -1,0 +1,9 @@
+{
+  "node": "C:\\path\\to\\node.exe",
+  "git": "C:\\path\\to\\git.exe",
+  "python": "C:\\path\\to\\python-with-platformio.exe",
+  "compilerBin": "C:\\path\\outside\\OneDrive\\compiler-bin",
+  "cadPython": "C:\\path\\outside\\OneDrive\\cad-venv\\Scripts\\python.exe",
+  "pgliteModule": "C:\\path\\outside\\OneDrive\\node_modules\\@electric-sql\\pglite\\dist\\index.js",
+  "benchProject": "C:\\path\\outside\\OneDrive\\firmware_pt1000_bench"
+}

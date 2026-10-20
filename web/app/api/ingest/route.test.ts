@@ -77,8 +77,8 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
     });
     assert.match(response.headers.get("x-request-id") ?? "", /^[0-9a-f-]{36}$/);
     assert.equal(upstreamCalls.length, 1);
-    assert.equal(String(upstreamCalls[0].input), "https://db.example.test/rest/v1/readings");
-    assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [reading]);
+    assert.equal(String(upstreamCalls[0].input), "https://db.example.test/rest/v1/readings?on_conflict=device_id,observation_id");
+    assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [{ ...reading, reset_reason: null }]);
     assert.equal((upstreamCalls[0].init?.signal as AbortSignal).aborted, false);
     assert.match(String(new Headers(upstreamCalls[0].init?.headers).get("Prefer")), /return=representation/);
   });
@@ -94,7 +94,7 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
     const response = await POST(signedRequest(JSON.stringify(legacy)));
 
     assert.equal(response.status, 200);
-    assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [legacy]);
+    assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [{ ...legacy, reset_reason: null }]);
   });
 
   await t.test("accepts the PT1000 operating range below the DS18B20 limit", async () => {
@@ -108,7 +108,7 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
     const response = await POST(signedRequest(JSON.stringify(rtdReading)));
 
     assert.equal(response.status, 200);
-    assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [rtdReading]);
+    assert.deepEqual(JSON.parse(String(upstreamCalls[0].init?.body)), [{ ...rtdReading, reset_reason: null }]);
   });
 
   await t.test("rejects a bad signature before contacting Supabase", async () => {
@@ -120,6 +120,61 @@ test("ingest route enforces authentication and payload boundaries", async (t) =>
 
     assert.equal(response.status, 401);
     assert.equal(upstreamCalls.length, 0);
+  });
+
+  await t.test("normalizes mixed optional fields before a PostgREST bulk insert", async () => {
+    configure();
+    upstreamCalls.length = 0;
+    const response = await POST(signedRequest(JSON.stringify([
+      { ...reading, reset_reason: "poweron" },
+      { ...reading, observation_id: `${DEVICE_ID}-123-4` },
+    ])));
+    assert.equal(response.status, 200);
+    const forwarded = JSON.parse(String(upstreamCalls[0].init?.body));
+    assert.deepEqual(Object.keys(forwarded[0]).sort(), Object.keys(forwarded[1]).sort());
+    assert.equal(forwarded[0].reset_reason, "poweron");
+    assert.equal(forwarded[1].reset_reason, null);
+  });
+
+  await t.test("sends an opaque server key only in apikey", async () => {
+    configure();
+    process.env.SUPABASE_SECRET_KEY = "sb_secret_SYNTHETIC_FIXTURE_NOT_A_CREDENTIAL";
+    upstreamCalls.length = 0;
+    assert.equal((await POST(signedRequest(JSON.stringify(reading)))).status, 200);
+    const headers = new Headers(upstreamCalls[0].init?.headers);
+    assert.equal(headers.get("apikey"), "sb_secret_SYNTHETIC_FIXTURE_NOT_A_CREDENTIAL");
+    assert.equal(headers.has("authorization"), false);
+  });
+
+  await t.test("targets the observation replay key in fleet and isolated prototype storage", async () => {
+    configure();
+    process.env.INGEST_DEVICE_SECRETS_JSON = JSON.stringify({ [DEVICE_ID]: SECRET, "prototype-22": SECRET });
+    const { freezer_id: unused, ...prototypeFields } = reading;
+    for (const [id, payload, table] of [
+      [DEVICE_ID, reading, "readings"],
+      ["prototype-22", { ...prototypeFields, prototype_id: 22, device_id: "prototype-22", observation_id: "prototype-22-123-1" }, "prototype_readings"],
+    ] as const) {
+      upstreamCalls.length = 0;
+      assert.equal((await POST(signedRequest(JSON.stringify(payload), { "x-device-id": id }))).status, 200);
+      const url = new URL(String(upstreamCalls[0].input));
+      assert.equal(url.pathname, `/rest/v1/${table}`);
+      assert.equal(url.searchParams.get("on_conflict"), "device_id,observation_id");
+    }
+  });
+
+  await t.test("rejects local/date-only/normalized invalid dates before forwarding", async () => {
+    configure();
+    for (const recorded_at of ["2026-09-29", "2026-09-29T12:00:00", "2026-02-30T12:00:00Z"]) {
+      upstreamCalls.length = 0;
+      assert.equal((await POST(signedRequest(JSON.stringify({ ...reading, recorded_at })))).status, 400);
+      assert.equal(upstreamCalls.length, 0);
+    }
+  });
+
+  await t.test("accepts explicit offsets and fractional database timestamp seconds", async () => {
+    configure();
+    assert.equal((await POST(signedRequest(JSON.stringify({ ...reading,
+      recorded_at: "2026-09-29T05:00:00.123456-07:00" })))).status, 200);
   });
 
   await t.test("rejects placeholder secrets", async () => {

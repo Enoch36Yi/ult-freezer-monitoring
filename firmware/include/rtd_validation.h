@@ -39,7 +39,8 @@ inline float temperatureCFromResistance(float resistance) {
 
   float value = z2 + (z3 * resistance);
   if (value >= 0.0f) {
-    return (std::sqrt(value) + z1) / z4;
+    const float temperature = (std::sqrt(value) + z1) / z4;
+    if (temperature >= 0.0f) return temperature;
   }
 
   // Polynomial branch required for negative Celsius temperatures.

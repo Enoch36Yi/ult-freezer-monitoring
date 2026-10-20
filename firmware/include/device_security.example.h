@@ -8,9 +8,11 @@
 // NVS through the provisioning portal.
 #define DEVICE_INGEST_SECRET "replace-with-at-least-32-random-characters"
 
-// ArduinoOTA expects a SHA-256 password hash, not the cleartext password.
-// Leave the listener disabled until this is replaced with 64 hex characters.
-#define OTA_PASSWORD_HASH "replace-with-64-lowercase-hex-characters"
+// Pinned ArduinoOTA/espota expects the password's lowercase MD5 digest.
+// Leave the listener disabled until this is replaced with 32 lowercase hex
+// characters. MD5 is required by this legacy authentication protocol; it is
+// not a firmware signature. Keep the matching password in a password manager.
+#define OTA_PASSWORD_HASH "replace-with-32-lowercase-hex-characters"
 
 // The provisioning AP must never be open. Use a separate password from the
 // ingest and OTA secrets, at least 12 characters long.

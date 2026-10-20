@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 // Sampling / reporting
 // ---------------------------------------------------------------------------
-#define FIRMWARE_VERSION "0.3.0"
+#define FIRMWARE_VERSION "0.3.2-local.20261018"
 #define TELEMETRY_PAYLOAD_VERSION 1
 #define SENSOR_TIER "esp32_pt1000_max31865"
 
@@ -26,8 +26,8 @@
 // ---------------------------------------------------------------------------
 // Firmware sends through the authenticated server-side ingestion endpoint.
 // Keep the Supabase service credentials out of firmware entirely.
-#define SUPABASE_URL "https://dfxxamgnrimwoumknuxa.supabase.co"
-#define INGEST_URL "https://ult-freezres.vercel.app/api/ingest"
+#define SUPABASE_URL "https://your-project.supabase.co"
+#define INGEST_URL "https://your-dashboard.example/api/ingest"
 #ifdef PROTOTYPE_22
 #define PROTOTYPE_ID 22
 #endif
@@ -44,8 +44,9 @@
 #define QUEUE_PATH "/queue.jsonl"
 #define QUEUE_TMP_PATH "/queue.tmp"
 #endif
-// ~180 bytes/reading. A 1 MB queue holds about 3.8 days for core IDs 1-6
-// (1-minute cadence) or about 58 days for fleet IDs 7-21 (15-minute cadence).
+// Byte cap, not a guaranteed retention duration. Current records include
+// identity/version metadata; retention depends on actual serialized size and
+// sampling cadence. Measure representative queue records before sizing an outage.
 #define QUEUE_MAX_BYTES 1000000UL
 // Readings per HTTPS request when draining the buffer. PostgREST accepts a
 // JSON array insert, so a batch costs one TLS handshake instead of N. At one

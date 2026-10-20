@@ -207,11 +207,12 @@ static bool ingestSecretIsUsable(const String &secret) {
 static bool otaPasswordHashIsUsable() {
 #if DEVICE_SECURITY_CONFIGURED
   const String hash = OTA_PASSWORD_HASH;
-  if (hash.length() != 64 || hash.startsWith("replace-")) return false;
+  // The pinned ArduinoOTA/espota protocol hashes the lowercase MD5 password
+  // digest as text. A SHA-256 digest or uppercase spelling cannot match it.
+  if (hash.length() != 32 || hash.startsWith("replace-")) return false;
   for (size_t i = 0; i < hash.length(); i++) {
     const char c = hash[i];
-    const bool hex = (c >= '0' && c <= '9') ||
-                     (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    const bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
     if (!hex) return false;
   }
   return true;
@@ -507,6 +508,13 @@ static bool recoverQueueTemp() {
   return false;
 }
 
+// A replacement must never be installed after a short positive write. Use
+// the same single-LF framing for appends and every queue rewrite.
+static bool writeQueueLine(File &file, const String &line) {
+  if (file.print(line) != line.length()) return false;
+  return file.write('\n') == 1;
+}
+
 // An append can lose power after writing the JSON bytes but before writing the
 // final newline. Keep every complete line and discard only that incomplete
 // tail. Rebuild through the temp path so a second power cut preserves the
@@ -544,7 +552,7 @@ static bool repairQueueTail() {
     // record. All earlier reads ended before originalSize and are complete.
     if (in.position() >= originalSize) break;
     line.trim();
-    if (!line.isEmpty() && out.println(line) == 0) {
+    if (!line.isEmpty() && !writeQueueLine(out, line)) {
       complete = false;
       break;
     }
@@ -616,7 +624,7 @@ static bool trimQueueIfNeeded() {
     String line = f.readStringUntil('\n');
     line.trim();
     if (!line.isEmpty()) {
-      if (out.println(line) == 0) {
+      if (!writeQueueLine(out, line)) {
         complete = false;
         break;
       }
@@ -652,13 +660,15 @@ static bool enqueueReading(const String &json) {
     Serial.println("[queue] could not open queue file; reading not acknowledged");
     return false;
   }
-  const size_t written = f.println(json);
+  // Even a failed first append can leave a partial tail. Remember the file so
+  // the next append repairs that tail before adding another JSON record.
+  g_queuePresence.onBuffered();
+  const bool complete = writeQueueLine(f, json);
   f.close();
-  if (written != json.length() + 1) {
+  if (!complete) {
     Serial.println("[queue] incomplete write; reading not acknowledged");
     return false;
   }
-  g_queuePresence.onBuffered();
   Serial.println("[queue] buffered reading to LittleFS");
   return true;
 }
@@ -709,7 +719,9 @@ static PostResult postJson(const String &body) {
   }
 
   WiFiClientSecure client;
-  client.setCACert(SUPABASE_ROOT_CA);
+  client.setCACert(INGEST_ROOT_CA);
+  // This API takes seconds; HTTPClient's timers do not bound the TLS handshake.
+  client.setHandshakeTimeout(HTTP_TIMEOUT_MS / 1000UL);
 
   HTTPClient http;
   http.setTimeout(HTTP_TIMEOUT_MS);
@@ -763,7 +775,9 @@ static void flushQueue() {
       g_queuePresence.onFlushRemaining(0);
       resetQueueRetry();
     } else {
+      // Use the bounded schedule rather than retrying on every loop() pass.
       Serial.println("[queue] could not remove empty queue file");
+      scheduleQueueRetry();
     }
     return;
   }
@@ -779,6 +793,7 @@ static void flushQueue() {
   size_t sent = 0;
   size_t batches = 0;
   bool stalled = false;
+  bool postFailed = false;
   // File offset of the first reading in the batch being built. On failure we
   // rewind here so the whole batch is preserved, not half-acknowledged.
   size_t batchStart = in.position();
@@ -814,9 +829,20 @@ static void flushQueue() {
       in.seek(batchStart);  // nothing in this batch was accepted
       Serial.printf("[queue] %s; preserving batch of %u readings\n",
                     postResultName(result), (unsigned)inBatch);
-      scheduleQueueRetry();
+      postFailed = true;
       stalled = true;
     }
+  }
+
+  if (sent == 0) {
+    // Nothing was accepted, so the original file is still the exact queue.
+    // Rewriting it would only add flash wear and a remove/rename window to
+    // every retry of a prolonged rejection.
+    in.close();
+    Serial.printf("[queue] no batch accepted; %u readings kept in place\n",
+                  (unsigned)pending);
+    scheduleQueueRetry();
+    return;
   }
 
   // Copy whatever is left, verbatim and in order, into the replacement file.
@@ -833,7 +859,7 @@ static void flushQueue() {
     String line = in.readStringUntil('\n');
     line.trim();
     if (line.isEmpty()) continue;
-    if (out.println(line) == 0) {
+    if (!writeQueueLine(out, line)) {
       complete = false;
       break;
     }
@@ -871,7 +897,9 @@ static void flushQueue() {
   }
   g_queuePresence.onFlushRemaining(kept);
   if (kept > 0) {
-    g_queueRetryDelayMs = QUEUE_FLUSH_RETRY_MS;
+    // A successful capped pass can continue promptly, but a failed post must
+    // retain its growing delay. Schedule exactly once after the rewrite.
+    if (!postFailed) g_queueRetryDelayMs = QUEUE_FLUSH_RETRY_MS;
     scheduleQueueRetry();
   } else {
     resetQueueRetry();

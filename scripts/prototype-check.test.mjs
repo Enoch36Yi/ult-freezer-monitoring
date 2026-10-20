@@ -1,3 +1,4 @@
+// Synthetic serial/API fixtures only; no research observations or database writes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseOptions, parseSerial, evaluateObservation } from './prototype-check.mjs';
